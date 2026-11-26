@@ -47,7 +47,7 @@ function buildKeypad() {
     if (/^\d$/.test(e.key)) press(e.key); else if (e.key === 'Backspace') press('⌫'); else if (e.key === 'Enter') press('OK');
   });
 }
-function drawPin() { $('pinDots').innerHTML = Array.from({ length: Math.max(4, pin.length) }, (_, i) => `<span class="${i < pin.length ? 'on' : ''}"></span>`).join(''); }
+function drawPin() { $('pinDots').innerHTML = Array.from({ length: Math.max(6, pin.length) }, (_, i) => `<span class="${i < pin.length ? 'on' : ''}"></span>`).join(''); }
 function press(k) {
   const lbl = $('pinLabel'); lbl.classList.remove('err'); lbl.textContent = 'Enter your code';
   if (k === '⌫') pin = pin.slice(0, -1);
