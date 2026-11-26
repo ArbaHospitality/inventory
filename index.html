@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1e4d2b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Inventory">
+<title>Inventory</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Login -->
+<section id="login" class="screen">
+  <div class="login-top">
+    <img src="icons/icon-192.png" alt="" class="logo">
+    <h1>Inventory</h1>
+    <p>Zoutra · Adraba</p>
+  </div>
+  <div class="pin-label" id="pinLabel">Enter your code</div>
+  <div class="pin-dots" id="pinDots"></div>
+  <div class="keypad" id="keypad"></div>
+</section>
+
+<!-- Main -->
+<section id="main" class="screen hidden">
+  <header>
+    <div class="top-row">
+      <button class="inv-switch" id="invSwitch" onclick="openInvPicker()"><span id="invName">Inventory</span><span class="caret" id="invCaret">▾</span></button>
+      <button class="icon-btn" onclick="openMenu()" aria-label="Menu">☰</button>
+    </div>
+    <div class="sub"><span id="monthLabel"></span> · <span id="saveStatus">Ready</span></div>
+  </header>
+
+  <div class="bar">
+    <div class="row">
+      <input id="search" type="search" placeholder="Search wine or supplier" oninput="render()">
+      <button class="step-btn" id="stepBtn" onclick="toggleStep()" aria-label="Change the + and − step">±1</button>
+      <select id="filter" onchange="render()">
+        <option value="all">All</option>
+        <option value="todo">Not counted</option>
+        <option value="done">Counted</option>
+      </select>
+    </div>
+    <div class="chips" id="chips"></div>
+    <div class="progress"><div id="prog"></div></div>
+  </div>
+
+  <main id="list"></main>
+
+  <footer>
+    <div class="tot"><b id="totBottles">0</b> bottles · <b id="totValue">0,00 €</b><br><span id="counted">0 / 0 counted</span></div>
+    <button class="btn" onclick="openFinish()">Finish</button>
+  </footer>
+</section>
+
+<!-- Bottom sheets -->
+<div class="sheet" id="invSheet" onclick="closeSheet(event,this)">
+  <div class="panel"><h3>Switch inventory</h3><div id="invList"></div></div>
+</div>
+
+<div class="sheet" id="menuSheet" onclick="closeSheet(event,this)">
+  <div class="panel">
+    <h3 id="menuName"></h3>
+    <div class="muted" id="menuRole"></div>
+    <div class="menu-list">
+      <button class="mgr-only" onclick="closeAll(); openEdit(null)">＋ Add a product</button>
+      <button class="mgr-only" onclick="resetCounts()">Start a new month (clear all counts)</button>
+      <button class="owner-only" onclick="openTeam()">Team members</button>
+      <button onclick="refresh(true)">Refresh</button>
+      <button onclick="openChangeCode()">Change my code</button>
+      <button class="danger" onclick="logout()">Log out</button>
+    </div>
+  </div>
+</div>
+
+<div class="sheet" id="finishSheet" onclick="closeSheet(event,this)">
+  <div class="panel">
+    <h3>Finish the count</h3>
+    <label>Month</label>
+    <select id="monthSel"></select>
+    <div class="stats">
+      <div class="stat"><span>Inventory</span><b id="fInv"></b></div>
+      <div class="stat"><span>Products counted</span><b id="fCounted"></b></div>
+      <div class="stat"><span>Total bottles</span><b id="fBottles"></b></div>
+      <div class="stat"><span>Total value (H.T)</span><b id="fValue"></b></div>
+      <div class="stat"><span>Counted by</span><b id="fBy"></b></div>
+    </div>
+    <div class="warn" id="fWarn"></div>
+    <button class="btn full" id="sendBtn" onclick="send()">Send to office</button>
+    <button class="btn light full" onclick="downloadXlsx()">Download Excel</button>
+    <button class="btn light full" onclick="closeAll()">Back to counting</button>
+  </div>
+</div>
+
+<div class="sheet" id="editSheet" onclick="closeSheet(event,this)">
+  <div class="panel">
+    <h3 id="editTitle">Product</h3>
+    <label>Product name</label><input id="eName">
+    <label>Category</label><select id="eCat"></select>
+    <label>Supplier</label><input id="eSup" list="supList"><datalist id="supList"></datalist>
+    <label>Price H.T (€)</label><input id="ePrice" inputmode="decimal">
+    <button class="btn full" id="eSave" onclick="saveEdit()">Save</button>
+    <button class="btn light full danger-text" id="removeBtn" onclick="removeProduct()">Remove this product</button>
+    <p class="muted small" id="removeHint">Only remove a wine you no longer work with. If it is just out of stock, count it as 0.</p>
+  </div>
+</div>
+
+<div class="sheet" id="codeSheet" onclick="closeSheet(event,this)">
+  <div class="panel">
+    <h3>Change my code</h3>
+    <label>New code (at least 4 characters)</label><input id="cNew" type="password" inputmode="numeric" autocomplete="new-password">
+    <label>New code again</label><input id="cNew2" type="password" inputmode="numeric" autocomplete="new-password">
+    <button class="btn full" id="cBtn" onclick="changeCode()">Save new code</button>
+    <button class="btn light full" onclick="closeAll()">Cancel</button>
+  </div>
+</div>
+
+<div class="sheet" id="teamSheet" onclick="closeSheet(event,this)">
+  <div class="panel tall">
+    <h3>Team members</h3>
+    <div id="teamList" class="team-list"></div>
+    <button class="btn full" onclick="openMember(null)">＋ Add a team member</button>
+    <button class="btn light full" onclick="closeAll()">Close</button>
+  </div>
+</div>
+
+<div class="sheet" id="memberSheet" onclick="closeSheet(event,this)">
+  <div class="panel tall">
+    <h3 id="mTitle">Team member</h3>
+    <label>Name</label><input id="mName" autocomplete="off">
+    <label>Personal code (at least 4 characters)</label><input id="mCode" inputmode="numeric" autocomplete="off">
+    <label class="check"><input type="checkbox" id="mOwner" onchange="ownerToggle()"> Owner (all inventories + team)</label>
+    <div id="mRoles"></div>
+    <button class="btn full" id="mSave" onclick="saveMember()">Save</button>
+    <button class="btn light full danger-text" id="mRemove" onclick="removeMember()">Remove from team</button>
+    <button class="btn light full" onclick="openTeam()">Back</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="busy hidden" id="busy"><div class="spinner"></div></div>
+
+<script src="xlsx.full.min.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
