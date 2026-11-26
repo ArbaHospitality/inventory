@@ -407,36 +407,6 @@ async function removeMember() {
   catch (e) { toast(e.message, 4000); } finally { busy(false); }
 }
 
-/* ---------------- activity (owners) ---------------- */
-const INV_KEYS = { 'Zoutra': 'zoutra', 'Adraba Wine': 'adraba-wine', 'Adraba Alcohol': 'adraba-alcohol' };
-async function openActivity() {
-  $('aInv').innerHTML = '<option value="">All inventories</option>' + Object.keys(INV_NAMES).map(k => `<option value="${k}">${INV_NAMES[k]}</option>`).join('');
-  $('activityList').innerHTML = '<p class="muted">Loading…</p>';
-  open('activitySheet');
-  await loadActivity(true);
-}
-async function loadActivity(first) {
-  const person = $('aPerson').value, inv = $('aInv').value;
-  try {
-    const r = await api('listActivity', { person: person, inv: inv, limit: 300 });
-    if (first) {
-      $('aPerson').innerHTML = '<option value="">Everyone</option>' + r.people.map(n => `<option>${esc(n)}</option>`).join('');
-      $('aPerson').value = person;
-    }
-    let html = '', day = null;
-    r.rows.forEach(x => {
-      if (x.date !== day) { day = x.date; html += `<div class="act-day">${esc(dayLabel(x.date))}</div>`; }
-      html += `<div class="act"><div class="t">${esc(x.time)}</div><div class="a"><b>${esc(x.person)}</b> · ${esc(x.action)}${x.product ? ' · ' + esc(x.product) : ''}
-        <div class="d">${x.inv ? esc(x.inv) : 'Team'}${x.details ? ' · ' + esc(x.details) : ''}</div></div></div>`;
-    });
-    $('activityList').innerHTML = html || '<p class="muted">Nothing yet.</p>';
-  } catch (e) { $('activityList').innerHTML = '<p class="muted">' + esc(e.message) + '</p>'; }
-}
-function dayLabel(d) {
-  const t = when(d + ' 00:00');
-  return /^\d{2}:\d{2}$/.test(t) ? 'Today' : t.replace(' 00:00', '');
-}
-
 /* ---------------- start ---------------- */
 document.addEventListener('visibilitychange', () => {   // back to the app: pick up counts made on other phones
   if (document.visibilityState === 'visible' && DATA && allSaved() && !document.querySelector('.sheet.open')) refresh(false);
