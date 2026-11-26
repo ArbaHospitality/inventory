@@ -1,6 +1,6 @@
 // Keeps the app's own files on the phone so it opens instantly.
 // Counts always go to the server; nothing about the inventory is stored here.
-const VERSION = 'inv-v3';
+const VERSION = 'inv-v4';
 const FILES = ['./', 'index.html', 'style.css', 'app.js', 'config.js', 'xlsx.full.min.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 
