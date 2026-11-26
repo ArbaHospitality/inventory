@@ -141,6 +141,7 @@ function render() {
     html += `<div class="item ${p.q !== null ? 'done' : ''}" id="it-${esc(p.id)}">
       <div class="info"><div class="name">${esc(p.name)}</div>
         <div class="meta">${esc(p.supplier)}${p.supplier ? ' · ' : ''}${fmt(p.price)}</div>
+        <div class="who" id="who-${esc(p.id)}">${whoLine(p)}</div>
         ${isMgr() ? `<button class="edit" onclick="openEdit('${esc(p.id)}')">Edit</button>` : ''}</div>
       <div class="qty">
         <button onclick="step('${esc(p.id)}',-1)" aria-label="minus">−</button>
@@ -163,6 +164,16 @@ function totals() {
   $('prog').style.width = (ps.length ? done / ps.length * 100 : 0) + '%';
   return { done, b, v, total: ps.length };
 }
+
+/* ---------------- who counted ---------------- */
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function when(at) {            // 'yyyy-MM-dd HH:mm' → '16:42' today, else '25 Nov 16:42'
+  const m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}:\d{2})/.exec(at || '');
+  if (!m) return at || '';
+  const d = new Date(), today = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  return (m[1] + '-' + m[2] + '-' + m[3] === today) ? m[4] : Number(m[3]) + ' ' + MON[Number(m[2]) - 1] + ' ' + m[4];
+}
+function whoLine(p) { return p.by ? '✓ ' + esc(p.by) + ' · ' + esc(when(p.at)) : ''; }
 
 /* ---------------- counting ---------------- */
 function setQty(id, q) {
@@ -199,8 +210,10 @@ function typed(id, v) {
 }
 function save(inv, id, q, tries) {
   delete pending[id]; inflight++;
-  api('saveCount', { inv: inv, id: id, q: q }).then(() => {
+  api('saveCount', { inv: inv, id: id, q: q }).then(r => {
     inflight--; if (allSaved()) $('saveStatus').textContent = 'All saved ✓';
+    const p = DATA && CUR === inv && DATA.products.find(x => x.id === id);
+    if (p && r && p.q === q) { p.by = r.by; p.at = r.at; const w = $('who-' + id); if (w) w.innerHTML = whoLine(p); }
   }).catch(e => {
     inflight--;
     if (/access|Wrong code/.test(e.message)) { toast(e.message, 4000); return; }
@@ -392,6 +405,36 @@ async function removeMember() {
   busy(true);
   try { TEAM = await api('removeUser', { name: MEMBER.originalName }); drawTeam(); open('teamSheet'); toast('Removed'); }
   catch (e) { toast(e.message, 4000); } finally { busy(false); }
+}
+
+/* ---------------- activity (owners) ---------------- */
+const INV_KEYS = { 'Zoutra': 'zoutra', 'Adraba Wine': 'adraba-wine', 'Adraba Alcohol': 'adraba-alcohol' };
+async function openActivity() {
+  $('aInv').innerHTML = '<option value="">All inventories</option>' + Object.keys(INV_NAMES).map(k => `<option value="${k}">${INV_NAMES[k]}</option>`).join('');
+  $('activityList').innerHTML = '<p class="muted">Loading…</p>';
+  open('activitySheet');
+  await loadActivity(true);
+}
+async function loadActivity(first) {
+  const person = $('aPerson').value, inv = $('aInv').value;
+  try {
+    const r = await api('listActivity', { person: person, inv: inv, limit: 300 });
+    if (first) {
+      $('aPerson').innerHTML = '<option value="">Everyone</option>' + r.people.map(n => `<option>${esc(n)}</option>`).join('');
+      $('aPerson').value = person;
+    }
+    let html = '', day = null;
+    r.rows.forEach(x => {
+      if (x.date !== day) { day = x.date; html += `<div class="act-day">${esc(dayLabel(x.date))}</div>`; }
+      html += `<div class="act"><div class="t">${esc(x.time)}</div><div class="a"><b>${esc(x.person)}</b> · ${esc(x.action)}${x.product ? ' · ' + esc(x.product) : ''}
+        <div class="d">${x.inv ? esc(x.inv) : 'Team'}${x.details ? ' · ' + esc(x.details) : ''}</div></div></div>`;
+    });
+    $('activityList').innerHTML = html || '<p class="muted">Nothing yet.</p>';
+  } catch (e) { $('activityList').innerHTML = '<p class="muted">' + esc(e.message) + '</p>'; }
+}
+function dayLabel(d) {
+  const t = when(d + ' 00:00');
+  return /^\d{2}:\d{2}$/.test(t) ? 'Today' : t.replace(' 00:00', '');
 }
 
 /* ---------------- start ---------------- */

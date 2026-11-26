@@ -73,6 +73,7 @@
       <button class="mgr-only" onclick="closeAll(); openEdit(null)">＋ Add a product</button>
       <button class="mgr-only" onclick="resetCounts()">Start a new month (clear all counts)</button>
       <button class="owner-only" onclick="openTeam()">Team members</button>
+      <button class="owner-only" onclick="openActivity()">Activity</button>
       <button onclick="refresh(true)">Refresh</button>
       <button onclick="openChangeCode()">Change my code</button>
       <button class="danger" onclick="logout()">Log out</button>
@@ -141,6 +142,18 @@
     <button class="btn full" id="mSave" onclick="saveMember()">Save</button>
     <button class="btn light full danger-text" id="mRemove" onclick="removeMember()">Remove from team</button>
     <button class="btn light full" onclick="openTeam()">Back</button>
+  </div>
+</div>
+
+<div class="sheet" id="activitySheet" onclick="closeSheet(event,this)">
+  <div class="panel tall">
+    <h3>Activity</h3>
+    <div class="row act-filters">
+      <select id="aPerson" onchange="loadActivity()"><option value="">Everyone</option></select>
+      <select id="aInv" onchange="loadActivity()"><option value="">All inventories</option></select>
+    </div>
+    <div id="activityList" class="act-list"></div>
+    <button class="btn light full" onclick="closeAll()">Close</button>
   </div>
 </div>
 

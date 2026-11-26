@@ -118,3 +118,15 @@ footer .tot b { color: var(--ink); font-size: 15px; }
 .busy { position: fixed; inset: 0; background: rgba(255,255,255,.55); z-index: 25; display: flex; align-items: center; justify-content: center; }
 .spinner { width: 36px; height: 36px; border: 4px solid var(--green-soft); border-top-color: var(--green); border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* who counted */
+.item .who { font-size: 11px; color: var(--ok); margin-top: 2px; }
+/* activity */
+.act-filters { margin-top: 10px; }
+.act-filters select { font-size: 14px; padding: 8px; }
+.act-list { margin-top: 10px; }
+.act-day { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin: 14px 2px 6px; }
+.act { display: flex; gap: 10px; padding: 9px 2px; border-bottom: 1px solid #eef1ec; font-size: 14px; }
+.act .t { color: var(--muted); font-size: 12px; min-width: 38px; padding-top: 2px; }
+.act .a b { font-weight: 600; }
+.act .d { color: var(--muted); font-size: 12px; margin-top: 2px; word-break: break-word; }
