@@ -3,6 +3,7 @@
 let TOKEN = '', ME = null, CUR = null, DATA = null, CAT = 'ALL', EDIT_ID = null;
 let TEAM = [], MEMBER = null, RESET = null;
 const pending = {};
+const LOCALQ = {};   // counts typed on this phone that the server has not confirmed yet
 let inflight = 0;
 
 const $ = id => document.getElementById(id);
@@ -74,10 +75,10 @@ async function doLogin() {
   if (!email || !password) return showAuth('login', t('errEmailPw'));
   const b = $('lBtn'); authBusy(b, true, t('loggingIn'));
   try {
-    const r = await api('login', { email: email, password: password, device: deviceName() });
-    TOKEN = r.token; ME = r.me; store.set('inv.token', TOKEN); store.set('inv.email', email);
+    const r = await api('login', { email: email, password: password, device: deviceName(), inv: store.get('inv.last') || '' });
+    TOKEN = r.token; ME = r.me; store.set('inv.token', TOKEN); store.set('inv.email', email); saveMe();
     $('lPass').value = '';
-    await enterApp();
+    enterApp(r.inventory);
   } catch (e) { showAuth('login', e.message); } finally { authBusy(b, false); }
 }
 async function doRegister() {
@@ -117,20 +118,52 @@ async function doReset() {
 }
 function logout(silent) {
   if (!silent && TOKEN) api('logout').catch(() => {});
-  store.set('inv.token', null);
+  store.set('inv.token', null); clearSaved();
   TOKEN = ''; ME = null; DATA = null; CUR = null; closeAll();
   showAuth('login');
 }
 
 /* ---------------- app ---------------- */
-async function enterApp() {
-  if (!ME.inventories.length) { logout(); showAuth('login', t('noInventory')); return; }
+/* What was last shown is kept on this phone, so the app opens instantly and then refreshes.
+   (Product names, prices and counts only; cleared on log out.) */
+function saveMe() { store.set('inv.me', JSON.stringify(ME)); }
+let saveTimer = null;
+function saveData() { clearTimeout(saveTimer); saveTimer = setTimeout(() => { if (DATA) store.set('inv.data.' + DATA.key, JSON.stringify(DATA)); }, 800); }
+function savedData(key) { try { return JSON.parse(store.get('inv.data.' + key) || 'null'); } catch (e) { return null; } }
+function clearSaved() {
+  store.set('inv.me', null);
+  try { Object.keys(localStorage).filter(k => k.indexOf('inv.data.') === 0).forEach(k => localStorage.removeItem(k)); } catch (e) {}
+}
+
+/** Shows an inventory; counts typed here and not yet confirmed by the server are kept. */
+function showInventory(d, fromServer) {
+  d.products.forEach(p => { p.q = (p.q === null || p.q === undefined || p.q === '') ? null : Number(p.q); });
+  if (fromServer) d.products.forEach(p => { const l = LOCALQ[d.key + '|' + p.id]; if (l !== undefined) p.q = l; });
+  const typing = document.activeElement && document.activeElement.id && document.activeElement.id.indexOf('q-') === 0;
+  const same = DATA && DATA.key === d.key;
+  const scroll = window.scrollY;
+  DATA = d;
+  document.body.classList.toggle('is-mgr', isMgr());
+  if (typing && same) {   // don't redraw under the person's finger: update numbers only
+    d.products.forEach(p => { const el = $('q-' + p.id); if (el && el !== document.activeElement) { el.value = p.q === null ? '' : p.q; el.classList.toggle('empty', p.q === null); } });
+    totals();
+  } else {
+    if (!same) { CAT = 'ALL'; $('search').value = ''; }
+    drawChips(); render();
+    if (same) window.scrollTo(0, scroll);
+  }
+  if (fromServer) saveData();
+}
+
+function enterApp(preloaded) {
+  if (!ME.inventories.length) { logout(true); showAuth('login', t('noInventory')); return; }
   $('login').classList.add('hidden'); $('main').classList.remove('hidden');
   const last = store.get('inv.last');
   CUR = ME.inventories.some(i => i.key === last) ? last : ME.inventories[0].key;
   $('invCaret').style.display = ME.inventories.length > 1 ? '' : 'none';
-  fillMonths();
-  await loadInventory();
+  fillMonths(); drawHeader();
+  if (preloaded && preloaded.key === CUR) { showInventory(preloaded, true); setStatus('ready'); return; }
+  loadInventory().catch(e => toast(e.message, 4000));
 }
 
 function setLogo(el, rest) {
@@ -150,13 +183,11 @@ function drawHeader() {
 
 async function loadInventory() {
   drawHeader();
-  $('list').innerHTML = '<div class="empty-state">…</div>';
-  CAT = 'ALL'; $('search').value = '';
-  DATA = await api('getInventory', { inv: CUR });
-  DATA.products.forEach(p => { p.q = (p.q === null || p.q === undefined || p.q === '') ? null : Number(p.q); });
-  document.body.classList.toggle('is-mgr', isMgr());
-  drawChips(); render();
-  setStatus('ready');
+  const key = CUR, saved = savedData(key);
+  if (saved) showInventory(saved, false);           // instant: last known list
+  else { $('list').innerHTML = '<div class="empty-state">…</div>'; DATA = null; }
+  const d = await api('getInventory', { inv: key });
+  if (CUR === key) { showInventory(d, true); setStatus(allSaved() ? 'ready' : STATUS); }
 }
 
 async function refresh(manual) {
@@ -263,7 +294,7 @@ function whoLine(p) { return p.by ? '✓ ' + esc(p.by) + ' · ' + esc(when(p.at)
 /* ---------------- counting ---------------- */
 function setQty(id, q) {
   const p = DATA.products.find(x => x.id === id);
-  p.q = q;
+  p.q = q; LOCALQ[CUR + '|' + id] = q;
   const inp = $('q-' + id), it = $('it-' + id);
   if (inp) { inp.value = q === null ? '' : q; inp.classList.toggle('empty', q === null); }
   if (it) it.classList.toggle('done', q !== null);
@@ -294,7 +325,9 @@ function save(inv, id, q, tries) {
   delete pending[id]; inflight++;
   api('saveCount', { inv: inv, id: id, q: q }).then(r => {
     inflight--; if (allSaved()) setStatus('allSaved');
+    if (LOCALQ[inv + '|' + id] === q) delete LOCALQ[inv + '|' + id];
     const p = DATA && CUR === inv && DATA.products.find(x => x.id === id);
+    if (DATA && CUR === inv) saveData();
     if (p && r && p.q === q) { p.by = r.by; p.at = r.at; const w = $('who-' + id); if (w) w.innerHTML = whoLine(p); }
   }).catch(e => {
     inflight--;
@@ -334,8 +367,19 @@ function openFinish() {
   $('fMissing').innerHTML = todo.length ? `<div class="missing"><p>${esc(t('notCountedList', { n: todo.length }))}</p>${todo.slice(0, 40).map(p =>
     `<button onclick="closeAll(); nextUncounted('${esc(p.id)}')">${esc(p.name)} <small>· ${esc(p.category)}</small></button>`).join('')}${todo.length > 40 ? '<button disabled>…</button>' : ''}</div>` : '';
   open('finishSheet');
+  loadXlsx().catch(() => {});   // get the Excel tool ready while the person reads
 }
-function buildXlsx(month) {
+let xlsxLoading = null;
+function loadXlsx() {
+  if (window.XLSX) return Promise.resolve();
+  return xlsxLoading || (xlsxLoading = new Promise((ok, no) => {
+    const sc = document.createElement('script'); sc.src = 'xlsx.full.min.js';
+    sc.onload = ok; sc.onerror = () => { xlsxLoading = null; no(new Error(t('noConn'))); };
+    document.head.appendChild(sc);
+  }));
+}
+async function buildXlsx(month) {
+  await loadXlsx();
   const ps = DATA.products, food = isFood();
   // columns: (Category) | Supplier | Product Name | [Unit] | Q | H.T | Value
   const head = ['', 'Supplier', 'Product Name'].concat(food ? ['Unit'] : []).concat(['Q', 'H.T', 'Value']);
@@ -360,9 +404,10 @@ function buildXlsx(month) {
   XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
   return { name: DATA.name + ' Inventory - ' + month + '.xlsx', b64: XLSX.write(wb, { bookType: 'xlsx', type: 'base64' }) };
 }
-function downloadXlsx() {
+async function downloadXlsx() {
   if (!allSaved()) return toast(t('stillSaving'));
-  const r = buildXlsx($('monthSel').value);
+  let r;
+  try { r = await buildXlsx($('monthSel').value); } catch (e) { return toast(e.message, 4000); }
   const bytes = Uint8Array.from(atob(r.b64), c => c.charCodeAt(0));
   const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   const file = new File([blob], r.name, { type: blob.type });
@@ -376,7 +421,7 @@ async function send() {
   if (!confirm(t('confirmSend', { inv: DATA.name, month: tMonth(month) }))) return;
   const b = $('sendBtn'); b.disabled = true; b.textContent = t('sending');
   try {
-    const x = buildXlsx(month);
+    const x = await buildXlsx(month);
     const r = await api('send', { inv: CUR, month: month, xlsx: x.b64 });
     closeAll(); toast(t('sentTo', { to: r.to }), 4500);
   } catch (e) { toast(e.message || t('sendFailed'), 4500); }
@@ -396,7 +441,7 @@ function openMenu() {
 async function resetCounts() {
   if (!confirm(t('confirmReset', { inv: DATA.name }))) return;
   closeAll(); busy(true);
-  try { DATA = await api('resetCounts', { inv: CUR }); drawChips(); render(); toast(t('countsCleared')); }
+  try { showInventory(await api('resetCounts', { inv: CUR }), true); drawChips(); render(); toast(t('countsCleared')); }
   catch (e) { toast(e.message, 4000); } finally { busy(false); }
 }
 
@@ -422,7 +467,7 @@ async function saveEdit() {
   if (!allSaved()) return toast(t('stillSaving'));
   const b = $('eSave'); b.disabled = true;
   try {
-    DATA = await api(EDIT_ID ? 'updateProduct' : 'addProduct', { inv: CUR, product: p });
+    showInventory(await api(EDIT_ID ? 'updateProduct' : 'addProduct', { inv: CUR, product: p }), true);
     closeAll(); drawChips(); render(); toast(EDIT_ID ? t('saved') : t('productAdded'));
   } catch (e) { toast(e.message, 4000); } finally { b.disabled = false; }
 }
@@ -431,7 +476,7 @@ async function removeProduct() {
   if (!confirm(t('confirmRemoveProduct', { name: p.name, inv: DATA.name }))) return;
   if (!allSaved()) return toast(t('stillSaving'));
   busy(true);
-  try { DATA = await api('removeProduct', { inv: CUR, id: EDIT_ID }); closeAll(); drawChips(); render(); toast(t('removed')); }
+  try { showInventory(await api('removeProduct', { inv: CUR, id: EDIT_ID }), true); closeAll(); drawChips(); render(); toast(t('removed')); }
   catch (e) { toast(e.message, 4000); } finally { busy(false); }
 }
 
@@ -577,8 +622,24 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.se
   $('lEmail').value = store.get('inv.email') || '';
   const saved = store.get('inv.token');
   if (!saved) return showAuth('login');
-  TOKEN = saved; busy(true);
-  try { ME = await api('me'); await enterApp(); }
-  catch (e) { if (TOKEN) showAuth('login', e.message); }
+  TOKEN = saved;
+  let quick = false;
+  try {
+    const me = JSON.parse(store.get('inv.me') || 'null'), last = store.get('inv.last');
+    const key = me && (me.inventories.some(i => i.key === last) ? last : (me.inventories[0] || {}).key);
+    const d = key && savedData(key);
+    if (me && d) { ME = me; quick = true; enterApp(d); setStatus('ready'); }   // instant
+  } catch (e) {}
+  if (!quick) busy(true);
+  try {
+    const r = await api('start', { inv: store.get('inv.last') || '' });
+    ME = r.me; saveMe();
+    if (!quick) enterApp(r.inventory);
+    else {
+      $('invCaret').style.display = ME.inventories.length > 1 ? '' : 'none';
+      if (!ME.inventories.some(i => i.key === CUR)) enterApp(r.inventory);
+      else { drawHeader(); if (r.inventory && r.inventory.key === CUR && allSaved()) showInventory(r.inventory, true); else if (r.inventory) loadInventory().catch(() => {}); }
+    }
+  } catch (e) { if (TOKEN && !quick) showAuth('login', e.message); else if (TOKEN) toast(e.message, 4000); }
   finally { busy(false); }
 })();
