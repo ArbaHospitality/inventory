@@ -59,7 +59,7 @@ async function doLogin() {
 async function doRegister() {
   const name = $('rName').value.trim(), email = $('rEmail').value.trim(), p1 = $('rPass').value, p2 = $('rPass2').value;
   if (!name || !email) return showAuth('register', 'Enter your name and email.');
-  if (p1.length < 8) return showAuth('register', 'The password needs at least 8 characters.');
+  if (p1.length < 10) return showAuth('register', 'The password needs at least 10 characters.');
   if (p1 !== p2) return showAuth('register', 'The two passwords are different.');
   const b = $('rBtn'); authBusy(b, true, 'Sending…');
   try {
@@ -81,7 +81,7 @@ async function doForgot() {
 }
 async function doReset() {
   const p1 = $('xPass').value, p2 = $('xPass2').value;
-  if (p1.length < 8) return showAuth('reset', 'The password needs at least 8 characters.');
+  if (p1.length < 10) return showAuth('reset', 'The password needs at least 10 characters.');
   if (p1 !== p2) return showAuth('reset', 'The two passwords are different.');
   const b = $('xBtn'); authBusy(b, true, 'Saving…');
   try {
@@ -368,7 +368,7 @@ async function removeProduct() {
 function openChangePass() { $('cCur').value = $('cNew').value = $('cNew2').value = ''; open('codeSheet'); }
 async function changePass() {
   const cur = $('cCur').value, n = $('cNew').value, n2 = $('cNew2').value;
-  if (n.length < 8) return toast('The new password needs at least 8 characters.');
+  if (n.length < 10) return toast('The new password needs at least 10 characters.');
   if (n !== n2) return toast('The two passwords are different.');
   const b = $('cBtn'); b.disabled = true;
   try { await api('changePassword', { current: cur, password: n }); closeAll(); toast('Password changed ✓ Other phones are logged out.', 3500); }
@@ -466,6 +466,24 @@ function shareInvite() {
   const text = 'Join the Zoutra / Adraba inventory app: open this link, tap "Create an account", then add it to your home screen.';
   if (navigator.share) navigator.share({ title: 'Inventory app', text: text, url: url }).catch(() => {});
   else { (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject()).then(() => toast('Link copied ✓')).catch(() => toast(url, 6000)); }
+}
+
+/* Rough strength hint while typing. The server makes the real check (common passwords etc). */
+function pwScore(pw) {
+  const low = pw.toLowerCase();
+  if (pw.length < 10) return 0;
+  if (/^\d+$/.test(pw) || /^(.{1,4})\1+$/.test(low) || /(zoutra|adraba|password|motdepasse|azerty|qwerty|123456|abcdef)/.test(low)) return 1;
+  const kinds = [/[a-z]/, /[A-Z]/, /\d/, /[^A-Za-z0-9]/].filter(r => r.test(pw)).length;
+  const words = pw.trim().split(/[\s\-_.]+/).filter(w => w.length >= 3).length;
+  if (pw.length >= 16 || words >= 3 || (pw.length >= 12 && kinds >= 3)) return 3;
+  return pw.length >= 12 || kinds >= 3 ? 2 : 1;
+}
+function pwHint(input) {
+  const box = $(input.id + 'Hint'), s = pwScore(input.value);
+  if (input.closest('.auth')) { $('authMsg').textContent = ''; $('authMsg').className = 'auth-msg'; }
+  const txt = ['At least 10 characters (' + input.value.length + '/10). Tip: 3–4 words.', 'Weak – easy to guess. Try 3–4 words.', 'OK', 'Strong ✓'][s];
+  box.className = 'pw-hint s' + s; box.querySelector('small').textContent = input.value ? txt : 'At least 10 characters. Tip: 3–4 words, e.g. "blue cellar tuesday".';
+  if (!input.value) box.className = 'pw-hint';
 }
 
 /* ---------------- start ---------------- */

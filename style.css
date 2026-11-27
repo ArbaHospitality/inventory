@@ -144,3 +144,12 @@ footer .tot b { color: var(--ink); font-size: 15px; }
 .tag { font-size: 11px; padding: 2px 6px; border-radius: 6px; margin-left: 6px; vertical-align: middle; }
 .tag.red { background: #fde8e8; color: #9b1c1c; }
 .auth label { display: block; font-size: 13px; margin: 12px 0 4px; }
+.pw-hint { margin-top: 6px; }
+.pw-hint small { display: block; font-size: 12.5px; line-height: 1.3; opacity: .85; margin-top: 4px; }
+.pw-bar { height: 5px; border-radius: 3px; background: rgba(127,127,127,.25); overflow: hidden; }
+.pw-bar span { display: block; height: 100%; width: 0; transition: width .2s, background .2s; }
+.pw-hint.s0 .pw-bar span { width: 15%; background: #c0392b; }
+.pw-hint.s1 .pw-bar span { width: 35%; background: #e67e22; }
+.pw-hint.s2 .pw-bar span { width: 65%; background: #d4ac0d; }
+.pw-hint.s3 .pw-bar span { width: 100%; background: #2e9e57; }
+.auth .pw-hint.s3 small { color: #b9f5c9; } .panel .pw-hint.s3 small { color: #1e7a3d; }

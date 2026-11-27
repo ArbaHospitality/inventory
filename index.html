@@ -39,7 +39,7 @@
       <p class="muted small">An owner approves new accounts. You get an email when it's done.</p>
       <label>Your name</label><input id="rName" autocomplete="name">
       <label>Email</label><input id="rEmail" type="email" autocomplete="username" autocapitalize="off" inputmode="email">
-      <label>Password (at least 8 characters)</label><input id="rPass" type="password" autocomplete="new-password">
+      <label>Password (at least 10 characters)</label><input id="rPass" type="password" autocomplete="new-password" oninput="pwHint(this)"><div class="pw-hint" id="rPassHint"><div class="pw-bar"><span></span></div><small>At least 10 characters. Tip: 3–4 words, e.g. "blue cellar tuesday".</small></div>
       <label>Password again</label><input id="rPass2" type="password" autocomplete="new-password">
       <button class="btn full" id="rBtn" type="submit">Send my request</button>
       <button class="link" type="button" onclick="showAuth('login')">‹ Back to log in</button>
@@ -56,7 +56,7 @@
     <form id="a-reset" class="hidden" onsubmit="event.preventDefault(); doReset()">
       <h2>Choose your password</h2>
       <p class="muted small" id="xEmail"></p>
-      <label>New password (at least 8 characters)</label><input id="xPass" type="password" autocomplete="new-password">
+      <label>New password (at least 10 characters)</label><input id="xPass" type="password" autocomplete="new-password" oninput="pwHint(this)"><div class="pw-hint" id="xPassHint"><div class="pw-bar"><span></span></div><small>At least 10 characters. Tip: 3–4 words, e.g. "blue cellar tuesday".</small></div>
       <label>New password again</label><input id="xPass2" type="password" autocomplete="new-password">
       <button class="btn full" id="xBtn" type="submit">Save password</button>
       <button class="link" type="button" onclick="showAuth('login')">‹ Back to log in</button>
@@ -158,7 +158,7 @@
   <div class="panel">
     <h3>Change my password</h3>
     <label>Current password</label><input id="cCur" type="password" autocomplete="current-password">
-    <label>New password (at least 8 characters)</label><input id="cNew" type="password" autocomplete="new-password">
+    <label>New password (at least 10 characters)</label><input id="cNew" type="password" autocomplete="new-password" oninput="pwHint(this)"><div class="pw-hint" id="cNewHint"><div class="pw-bar"><span></span></div><small>At least 10 characters. Tip: 3–4 words, e.g. "blue cellar tuesday".</small></div>
     <label>New password again</label><input id="cNew2" type="password" autocomplete="new-password">
     <button class="btn full" id="cBtn" onclick="changePass()">Save new password</button>
     <button class="btn light full" onclick="closeAll()">Cancel</button>
