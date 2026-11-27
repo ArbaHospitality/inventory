@@ -66,7 +66,7 @@ function route_(r) {
   // actions that do not need a login
   switch (r.action) {
     case 'register':      return register_(r.name, r.email, r.password);
-    case 'login':         return login_(r.email, r.password, r.device);
+    case 'login':         return login_(r.email, r.password, r.device, r.inv);
     case 'forgot':        return forgot_(r.email);
     case 'resetPassword': return resetPassword_(r.email, r.token, r.password);
   }
@@ -74,6 +74,7 @@ function route_(r) {
   const user = s.user;
   switch (r.action) {
     case 'me':             return me_(user);
+    case 'start':          return start_(user, r.inv);
     case 'logout':         return logout_(s);
     case 'changePassword': return changePassword_(user, s, r.current, r.password);
     case 'getInventory':   need_(user, r.inv, 'count');   return getInventory_(r.inv);
@@ -102,11 +103,17 @@ function sheet_(name) {
   return sh;
 }
 let INV_ = null, REST_ = null;
+/* Short-lived copies kept in Google's script cache, so most requests do not read the Sheet. */
+const CACHE_ = CacheService.getScriptCache();
+function cget_(k) { const v = CACHE_.get(k); return v ? JSON.parse(v) : null; }
+function cput_(k, v, seconds) { try { CACHE_.put(k, JSON.stringify(v), seconds); } catch (e) { /* too big: skip */ } }
+function cdel_(k) { CACHE_.remove(k); }
 function yes_(v) { return /^(yes|y|true|1|oui|on)$/i.test(String(v).trim()); }
 function slug_(s) { return String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); }
 /** All inventories (also switched-off ones). */
 function allInventories_() {
   if (INV_) return INV_;
+  if ((INV_ = cget_('inventories'))) return INV_;
   const sh = ss_().getSheetByName(INVENTORIES_TAB);
   if (!sh || sh.getLastRow() < 2) return (INV_ = DEFAULT_INVENTORIES.map(i => Object.assign({ tab: i.name }, i)));
   INV_ = sh.getRange(2, 1, sh.getLastRow() - 1, 6).getValues().filter(r => String(r[1]).trim()).map(r => {
@@ -114,15 +121,18 @@ function allInventories_() {
     return { key: String(r[0]).trim() || slug_(name), name: name, tab: name, restaurant: String(r[2]).trim(),
              type: String(r[3]).trim() || 'Wine', prefix: String(r[4]).trim() || name.slice(0, 2).toUpperCase(), active: yes_(r[5]) };
   });
+  cput_('inventories', INV_, 300);   // edits in the Inventories tab show within 5 minutes
   return INV_;
 }
 function inventories_() { return allInventories_().filter(i => i.active); }
 function restaurants_() {
   if (REST_) return REST_;
+  if ((REST_ = cget_('restaurants'))) return REST_;
   const sh = ss_().getSheetByName(RESTAURANTS);
   REST_ = (!sh || sh.getLastRow() < 2) ? DEFAULT_RESTAURANTS
     : sh.getRange(2, 1, sh.getLastRow() - 1, 3).getValues().filter(r => String(r[0]).trim())
         .map(r => ({ name: String(r[0]).trim(), colour: String(r[1]).trim() || '#1e4d2b', logo: String(r[2]).trim() }));
+  cput_('restaurants', REST_, 300);
   return REST_;
 }
 function isFood_(inv) { return /food|cuisine|nourriture/i.test(inv.type); }
@@ -237,7 +247,15 @@ function ensureUserCols_() {
   });
   return cols;
 }
-function readUsers_() {
+/** All users. Reads the Sheet at most every 2 minutes unless fresh is true (always fresh before a change). */
+function readUsers_(fresh) {
+  if (!fresh) { const c = cget_('users'); if (c) return c; }
+  const list = readUsersFromSheet_();
+  cput_('users', list, 120);
+  return list;
+}
+function usersChanged_() { cdel_('users'); }
+function readUsersFromSheet_() {
   const sh = sheet_(USERS);
   const last = sh.getLastRow();
   if (last < 2) return [];
@@ -256,7 +274,7 @@ function readUsers_() {
     };
   }).filter(u => u.email);
 }
-function findUser_(email) { email = cleanEmail_(email); return readUsers_().find(u => u.email === email) || null; }
+function findUser_(email, fresh) { email = cleanEmail_(email); return readUsers_(fresh).find(u => u.email === email) || null; }
 function normRole_(v) {
   v = String(v || '').trim().toLowerCase();
   if (v.startsWith('man')) return 'manager';
@@ -265,10 +283,20 @@ function normRole_(v) {
 }
 function roleOf_(user, key) { return user.owner ? 'manager' : (user.roles[key] || ''); }
 function roleLabel_(r) { return r === 'manager' ? 'Manager' : r === 'count' ? 'Count' : ''; }
-/** Writes cells of one user row by header name: setUser_(5, { 'Status': 'Active' }). */
-function setUser_(row, values) {
-  const cols = ensureUserCols_(), sh = sheet_(USERS);
+/** Row of a user in the Sheet right now (never from the cache). */
+function userRow_(email) {
+  const sh = sheet_(USERS), cols = userCols_(), last = sh.getLastRow();
+  if (last < 2) return 0;
+  const emails = sh.getRange(2, cols.map[UH.email], last - 1, 1).getValues();
+  for (let i = 0; i < emails.length; i++) if (cleanEmail_(emails[i][0]) === cleanEmail_(email)) return i + 2;
+  return 0;
+}
+/** Writes cells of one user by header name: setUser_('a@b.com', { 'Status': 'Active' }). */
+function setUser_(email, values) {
+  const cols = ensureUserCols_(), sh = sheet_(USERS), row = userRow_(email);
+  if (!row) throw new Error('Team member not found.');
   Object.keys(values).forEach(h => sh.getRange(row, cols.map[h]).setValue(values[h]));
+  usersChanged_();
 }
 function rolesCells_(roles) {
   const o = {};
@@ -304,13 +332,14 @@ function register_(name, email, password) {
   if (n >= 20) throw new Error('Too many sign-up requests right now. Try again in an hour.');
   cache.put('registrations', String(n + 1), 3600);
   return withLock_(() => {
-    if (findUser_(email)) throw new Error('An account with this email already exists. Log in, or use "Forgot password".');
+    if (findUser_(email, true)) throw new Error('An account with this email already exists. Log in, or use "Forgot password".');
     const cols = ensureUserCols_();
     const row = new Array(cols.width).fill('');
     const put = (h, v) => { row[cols.map[h] - 1] = v; };
     put(UH.name, safe_(name)); put(UH.email, email); put(UH.status, 'Pending'); put(UH.owner, 'No');
     put(UH.hash, hashPassword_(password)); put(UH.created, now_());
     sheet_(USERS).appendRow(row);
+    usersChanged_();
     log_({ name: name }, '', 'Account requested', name, email);
     const owners = readUsers_().filter(u => u.owner && u.status === 'Active').map(u => u.email);
     if (owners.length) {
@@ -323,7 +352,7 @@ function register_(name, email, password) {
   });
 }
 
-function login_(email, password, device) {
+function login_(email, password, device, invKey) {
   email = cleanEmail_(email);
   const cache = CacheService.getScriptCache(), key = 'fail:' + sha256Hex_(email);
   const fails = Number(cache.get(key) || 0);
@@ -343,7 +372,15 @@ function login_(email, password, device) {
     pruneSessions_();
     sheet_(SESSIONS).appendRow([sha256Hex_(token), u.email, now_(), expires, safe_(String(device || '').slice(0, 80))]);
   });
-  return { token: token, expires: expires, me: me_(u) };
+  return Object.assign({ token: token, expires: expires }, start_(u, invKey));
+}
+
+/** What the app needs when it opens: who you are + the inventory you last used (one request instead of two). */
+function start_(user, invKey) {
+  const me = me_(user);
+  if (!me.inventories.length) return { me: me, inventory: null };
+  const key = me.inventories.some(i => i.key === invKey) ? invKey : me.inventories[0].key;
+  return { me: me, inventory: getInventory_(key) };
 }
 
 function readSessions_() {
@@ -358,22 +395,30 @@ function pruneSessions_() {
 }
 function revokeSessions_(email, exceptHash) {
   const sh = sheet_(SESSIONS);
-  readSessions_().filter(s => s.email === email && s.hash !== exceptHash).reverse().forEach(s => sh.deleteRow(s.row));
+  readSessions_().filter(s => s.email === email && s.hash !== exceptHash).reverse().forEach(s => { sh.deleteRow(s.row); cdel_('s:' + s.hash); });
 }
 
 function session_(token) {
   token = String(token || '');
   if (token.length < 40) throw authError_('Please log in.');
   const h = sha256Hex_(token);
-  const s = readSessions_().find(x => x.hash === h);
+  let s = cget_('s:' + h);
+  if (!s) {
+    s = readSessions_().find(x => x.hash === h);
+    if (s) cput_('s:' + h, { email: s.email, expires: s.expires }, 6 * 3600);
+  }
   if (!s || s.expires < Date.now()) throw authError_('Your login has expired. Please log in again.');
   const user = findUser_(s.email);
   if (!user || user.status !== 'Active') throw authError_('This account is no longer active.');
-  return { hash: h, row: s.row, user: user };
+  return { hash: h, user: user };
 }
 
 function logout_(s) {
-  withLock_(() => { sheet_(SESSIONS).deleteRow(s.row); });
+  withLock_(() => {
+    const row = readSessions_().find(x => x.hash === s.hash);
+    if (row) sheet_(SESSIONS).deleteRow(row.row);
+    cdel_('s:' + s.hash);
+  });
   return true;
 }
 
@@ -381,7 +426,7 @@ function changePassword_(user, s, current, password) {
   if (!checkPassword_(String(current || ''), user.hash)) throw new Error('Your current password is not correct.');
   checkNewPassword_(password, user.name, user.email);
   return withLock_(() => {
-    setUser_(user.row, { [UH.hash]: hashPassword_(password) });
+    setUser_(user.email, { [UH.hash]: hashPassword_(password) });
     revokeSessions_(user.email, s.hash);   // other phones are logged out
     log_(user, '', 'Changed own password', '', 'Other phones logged out');
     return true;
@@ -405,7 +450,7 @@ function forgot_(email) {
 function sendResetEmail_(u, welcome) {
   const token = randomToken_();
   const minutes = welcome ? 7 * 24 * 60 : RESET_MINUTES;
-  setUser_(u.row, { [UH.resetHash]: sha256Hex_(token), [UH.resetExp]: Date.now() + minutes * 60000 });
+  setUser_(u.email, { [UH.resetHash]: sha256Hex_(token), [UH.resetExp]: Date.now() + minutes * 60000 });
   const link = appUrl_() + '?reset=' + encodeURIComponent(token) + '&e=' + encodeURIComponent(u.email);
   const subject = welcome ? 'Inventory app: set your password' : 'Inventory app: reset your password';
   const body = (welcome
@@ -418,12 +463,12 @@ function sendResetEmail_(u, welcome) {
 function resetPassword_(email, token, password) {
   email = cleanEmail_(email);
   return withLock_(() => {
-    const u = findUser_(email);
+    const u = findUser_(email, true);
     if (!u || !u.resetHash || u.resetHash !== sha256Hex_(String(token || '')) || u.resetExp < Date.now()) {
       throw new Error('This link is not valid any more. Ask for a new one with "Forgot password".');
     }
     checkNewPassword_(password, u.name, u.email);
-    setUser_(u.row, { [UH.hash]: hashPassword_(password), [UH.resetHash]: '', [UH.resetExp]: '' });
+    setUser_(u.email, { [UH.hash]: hashPassword_(password), [UH.resetHash]: '', [UH.resetExp]: '' });
     revokeSessions_(u.email, null);
     log_(u, '', 'Reset password', '', 'By email link');
     return { status: u.status };
@@ -443,12 +488,12 @@ function activeOwners_(users) { return users.filter(x => x.owner && x.status ===
 
 function approveUser_(me, email, roles, owner) {
   return withLock_(() => {
-    const u = findUser_(email);
+    const u = findUser_(email, true);
     if (!u) throw new Error('Team member not found.');
     if (u.status !== 'Pending') throw new Error('This account is not waiting for approval.');
     const rc = rolesCells_(roles);
     if (!owner && !Object.keys(rc).some(k => rc[k])) throw new Error('Choose at least one inventory before approving.');
-    setUser_(u.row, Object.assign({ [UH.status]: 'Active', [UH.owner]: owner ? 'Yes' : 'No', [UH.approvedBy]: safe_(me.name) }, rc));
+    setUser_(u.email, Object.assign({ [UH.status]: 'Active', [UH.owner]: owner ? 'Yes' : 'No', [UH.approvedBy]: safe_(me.name) }, rc));
     const r = {}; allInventories_().forEach(i => { r[i.key] = normRole_((roles || {})[i.key]); });
     log_(me, '', 'Approved team member', u.name, accessText_(!!owner, r));
     MailApp.sendEmail(u.email, 'Inventory app: your account is approved',
@@ -460,14 +505,14 @@ function approveUser_(me, email, roles, owner) {
 /** Edit an active or blocked member: name, owner flag, roles. */
 function saveUser_(me, x) {
   return withLock_(() => {
-    const users = readUsers_();
+    const users = readUsers_(true);
     const u = users.find(y => y.email === cleanEmail_(x.email));
     if (!u) throw new Error('Team member not found.');
     const name = String(x.name || '').trim().slice(0, 60);
     if (!name) throw new Error('Please enter a name.');
     const owner = !!x.owner;
     if (u.owner && !owner && activeOwners_(users).length === 1 && u.status === 'Active') throw new Error('There must always be at least one owner.');
-    setUser_(u.row, Object.assign({ [UH.name]: safe_(name), [UH.owner]: owner ? 'Yes' : 'No' }, rolesCells_(x.roles)));
+    setUser_(u.email, Object.assign({ [UH.name]: safe_(name), [UH.owner]: owner ? 'Yes' : 'No' }, rolesCells_(x.roles)));
     const r = {}; allInventories_().forEach(i => { r[i.key] = normRole_((x.roles || {})[i.key]); });
     log_(me, '', 'Edited team member', name, accessText_(owner, r) + (u.name !== name ? ' (was ' + u.name + ')' : ''));
     return listUsers_();
@@ -476,12 +521,12 @@ function saveUser_(me, x) {
 
 function setBlocked_(me, email, blocked) {
   return withLock_(() => {
-    const users = readUsers_();
+    const users = readUsers_(true);
     const u = users.find(y => y.email === cleanEmail_(email));
     if (!u) throw new Error('Team member not found.');
     if (u.email === me.email) throw new Error('You cannot block yourself.');
     if (blocked && u.owner && activeOwners_(users).length === 1) throw new Error('There must always be at least one owner.');
-    setUser_(u.row, { [UH.status]: blocked ? 'Blocked' : 'Active' });
+    setUser_(u.email, { [UH.status]: blocked ? 'Blocked' : 'Active' });
     if (blocked) revokeSessions_(u.email, null);
     log_(me, '', blocked ? 'Blocked team member' : 'Unblocked team member', u.name, blocked ? 'Logged out everywhere' : '');
     return listUsers_();
@@ -490,13 +535,14 @@ function setBlocked_(me, email, blocked) {
 
 function removeUser_(me, email) {
   return withLock_(() => {
-    const users = readUsers_();
+    const users = readUsers_(true);
     const u = users.find(y => y.email === cleanEmail_(email));
     if (!u) throw new Error('Team member not found.');
     if (u.email === me.email) throw new Error('You cannot remove yourself.');
     if (u.owner && activeOwners_(users).length === 1) throw new Error('There must always be at least one owner.');
     revokeSessions_(u.email, null);
-    sheet_(USERS).deleteRow(u.row);
+    sheet_(USERS).deleteRow(userRow_(u.email));
+    usersChanged_();
     log_(me, '', u.status === 'Pending' ? 'Rejected account request' : 'Removed team member', u.name, '');
     return listUsers_();
   });
@@ -738,12 +784,13 @@ function setupAccounts() {
       : h === UH.created ? now_() : h === UH.approvedBy ? 'Setup' : allInventories_().some(i => i.name === h) ? 'Manager' : '');
     users.appendRow(row);
   });
+  usersChanged_();
   let sessions = ss.getSheetByName(SESSIONS);
   if (!sessions) sessions = ss.insertSheet(SESSIONS);
   sessions.clear();
   sessions.getRange(1, 1, 1, 5).setValues([['Token (hashed)', 'Email', 'Created', 'Expires (ms)', 'Device']]).setFontWeight('bold');
   sessions.setFrozenRows(1);
-  readUsers_().forEach(u => sendResetEmail_(u, true));
+  readUsers_(true).forEach(u => sendResetEmail_(u, true));
 }
 
 /**
@@ -768,7 +815,7 @@ function setupRestaurants() {
     DEFAULT_INVENTORIES.forEach(x => t.appendRow([x.key, x.name, x.restaurant, x.type, x.prefix, x.active ? 'Yes' : 'No']));
     t.setFrozenRows(1);
   }
-  INV_ = null; REST_ = null;
+  INV_ = null; REST_ = null; cdel_('inventories'); cdel_('restaurants'); usersChanged_();
   allInventories_().forEach(inv => {
     let sh = ss.getSheetByName(inv.tab);
     if (!sh) {
