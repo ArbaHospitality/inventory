@@ -11,7 +11,7 @@ const store = {
   get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } },
   set: (k, v) => { try { v === null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} }
 };
-const locale = () => LANG === 'he' ? 'he-IL' : LANG === 'fr' ? 'fr-FR' : 'en-GB';
+const locale = () => LANG === 'fr' ? 'fr-FR' : 'en-GB';
 const iso = s => '\u2066' + s + '\u2069';   // keeps numbers left-to-right inside Hebrew text
 const fmt = n => iso((Math.round(n * 100) / 100).toLocaleString(locale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '\u00a0€');
 const num = n => iso((Math.round(n * 100) / 100).toLocaleString(locale()));
@@ -49,7 +49,7 @@ async function api(action, params) {
 function drawLangPickers() {
   ['loginLang', 'menuLang'].forEach(id => {
     $(id).innerHTML = Object.keys(LANGS).map(l =>
-      `<button type="button" class="${l === LANG ? 'on' : ''}" onclick="setLang('${l}')">${l === 'he' ? 'עב' : l.toUpperCase()}</button>`).join('');
+      `<button type="button" class="${l === LANG ? 'on' : ''}" onclick="setLang('${l}')">${l.toUpperCase()}</button>`).join('');
   });
 }
 function setLang(l) {
@@ -332,7 +332,7 @@ function save(inv, id, q, tries) {
   }).catch(e => {
     inflight--;
     if (!TOKEN) return;
-    if (/access|accès|גישה/.test(e.message)) { toast(e.message, 4000); return; }
+    if (/access|accès/.test(e.message)) { toast(e.message, 4000); return; }
     if (tries < 5) { setStatus('retrying'); setTimeout(() => save(inv, id, q, tries + 1), 2000 * (tries + 1)); }
     else { setStatus('notSaved'); toast(t('couldNotSave'), 4000); }
   });
@@ -608,7 +608,8 @@ document.addEventListener('visibilitychange', () => {   // back to the app: pick
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 
 (async function start() {
-  LANG = store.get('inv.lang') || detectLang();
+  LANG = store.get('inv.lang');
+  if (!LANGS[LANG]) LANG = detectLang();   // Hebrew was removed: those phones go back to the default
   applyTexts(); drawLangPickers(); drawStep();
   document.querySelectorAll('.pw-hint small').forEach(s => { s.textContent = t('pwTip'); });
   store.set('inv.code', null);   // old PIN codes are no longer used

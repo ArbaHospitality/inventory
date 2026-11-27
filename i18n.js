@@ -1,5 +1,5 @@
-/* Texts of the app in English, French and Hebrew. t('key', { name: 'Hippo' }) */
-const LANGS = { en: 'English', fr: 'Français', he: 'עברית' };
+/* Texts of the app in English and French. t('key', { name: 'Hippo' }) */
+const LANGS = { en: 'English', fr: 'Français' };
 
 const TEXT = {
   en: {
@@ -114,87 +114,30 @@ const TEXT = {
     'unit:kg': 'kg', 'unit:g': 'g', 'unit:L': 'L', 'unit:piece': 'pièce', 'unit:box': 'carton', 'unit:bottle': 'bouteille',
     months: ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'],
     mon: ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.']
-  },
-
-  he: {
-    email: 'אימייל', password: 'סיסמה', login: 'כניסה', loggingIn: 'מתחבר…', forgot: 'שכחת סיסמה?',
-    newTeam: 'חדש בצוות?', createAccount: 'יצירת חשבון', createTitle: 'יצירת חשבון',
-    createHint: 'בעלים מאשרים חשבונות חדשים. תקבל/י אימייל כשהחשבון יאושר.', yourName: 'השם שלך',
-    pwLabel: 'סיסמה (לפחות 10 תווים)', pwAgain: 'סיסמה שוב', sendRequest: 'שליחת הבקשה',
-    backLogin: '› חזרה לכניסה', forgotTitle: 'שכחתי סיסמה', forgotHint: 'הכנס/י את האימייל שלך ונשלח קישור לבחירת סיסמה חדשה.',
-    sendLink: 'שלחו לי קישור', chooseTitle: 'בחירת סיסמה', newPw: 'סיסמה חדשה (לפחות 10 תווים)', newPwAgain: 'סיסמה חדשה שוב',
-    savePw: 'שמירת סיסמה', backToLogin: 'חזרה לכניסה', pleaseWait: 'רגע…', sending: 'שולח…', savingBtn: 'שומר…',
-    errEmailPw: 'הכנס/י אימייל וסיסמה.', errNameEmail: 'הכנס/י שם ואימייל.', errPwLen: 'הסיסמה צריכה לפחות 10 תווים.',
-    errPwDiff: 'שתי הסיסמאות שונות.', errEmail: 'הכנס/י אימייל.',
-    doneRegister: 'תודה {name}! הבקשה נשלחה. תקבל/י אימייל ברגע שאחד הבעלים יאשר, ואז אפשר להיכנס.',
-    doneForgot: 'אם קיים חשבון עבור {email}, נשלח אליו קישור לבחירת סיסמה חדשה. בדוק/י את תיבת הדואר (וגם ספאם). הקישור תקף לשעה.',
-    pwSaved: 'הסיסמה נשמרה ✓ אפשר להיכנס.', pwSavedPending: 'הסיסמה נשמרה. החשבון עדיין ממתין לאישור.',
-    noInventory: 'עדיין אין לך גישה לאף מלאי. פנה/י לאחד הבעלים.',
-    search: 'חיפוש מוצר או ספק', all: 'הכול', todo: 'לא נספר', doneF: 'נספר',
-    ready: 'מוכן', saving: 'שומר…', allSaved: 'הכול נשמר ✓', retrying: 'מנסה שוב…', notSaved: 'לא נשמר – בדוק/י חיבור',
-    bottles: 'בקבוקים', counted: '{n} / {t} נספרו', finish: 'סיום', next: 'הבא שלא נספר', allCounted: 'הכול נספר ✓',
-    edit: 'עריכה', noProducts: 'אין עדיין מוצרים ב{inv}.', addFirst: '＋ הוספת המוצר הראשון', askManager: 'בקש/י ממנהל להוסיף אותם.', noMatch: 'לא נמצאו מוצרים.',
-    stepWhole: '+ ו־− סופרים עכשיו יחידות שלמות', stepFine: '+ ו־− סופרים עכשיו 0.1', enterNumber: 'הכנס/י מספר, למשל 3 או 0.5',
-    stillSaving: 'עדיין שומר, נסה/י שוב בעוד שנייה.', upToDate: 'מעודכן ✓', couldNotSave: 'לא נשמר. בדוק/י את החיבור.',
-    finishTitle: 'סיום הספירה', month: 'חודש', inventory: 'מלאי', productsCounted: 'מוצרים שנספרו', totalBottles: 'סה״כ בקבוקים',
-    totalValue: 'שווי כולל (לפני מע״מ)', countedBy: 'נשלח ע״י', notCountedList: '{n} עדיין לא נספרו. הם יישלחו כ־0:',
-    sendOffice: 'שליחה למשרד', downloadExcel: 'הורדת אקסל', backCounting: 'חזרה לספירה',
-    confirmSend: 'לשלוח את מלאי {inv} של {month} למשרד?', sentTo: 'נשלח אל {to} ✓', sendFailed: 'השליחה נכשלה',
-    addProduct: '＋ הוספת מוצר', newMonth: 'חודש חדש (מחיקת כל הספירות)', team: 'צוות', refresh: 'רענון',
-    changePw: 'שינוי הסיסמה שלי', language: 'שפה', logout: 'התנתקות',
-    confirmReset: 'למחוק את כל הספירות ב{inv} ולהתחיל חודש חדש?\n\nוודא/י קודם שהחודש הקודם נשלח למשרד.',
-    countsCleared: 'הספירות נמחקו. מוכן לחודש חדש.',
-    addProductTo: 'הוספת מוצר ל{inv}', editProduct: 'עריכת מוצר', productName: 'שם המוצר', category: 'קטגוריה',
-    supplier: 'ספק', priceHT: 'מחיר לפני מע״מ (€)', pricePer: 'מחיר לפני מע״מ (€) ל־', unit: 'יחידה', save: 'שמירה', removeProduct: 'מחיקת המוצר',
-    removeHint: 'מחק/י רק מוצר שכבר לא עובדים איתו. אם הוא רק חסר במלאי, ספור/י אותו כ־0.',
-    enterProductName: 'הכנס/י שם מוצר.', saved: 'נשמר ✓', productAdded: 'המוצר נוסף ✓', removed: 'נמחק',
-    confirmRemoveProduct: 'למחוק את "{name}" מ{inv}?',
-    changePwTitle: 'שינוי הסיסמה שלי', currentPw: 'הסיסמה הנוכחית', saveNewPw: 'שמירת הסיסמה החדשה', cancel: 'ביטול',
-    pwChanged: 'הסיסמה שונתה ✓ טלפונים אחרים נותקו.',
-    teamTitle: 'צוות', waiting: 'ממתינים לאישור ({n})', teamHead: 'צוות', shareLink: 'שיתוף קישור ההרשמה', close: 'סגירה',
-    noTeam: 'אין עדיין אנשי צוות.', ownerAll: 'בעלים · כל המלאים', noAccess: 'אין גישה עדיין', noPwYet: 'אין סיסמה עדיין',
-    asked: 'ביקש/ה ב־{when}', blocked: 'חסום',
-    approveQ: 'לאשר את {name}?', approveHint: 'בחר/י מה {name} יכול/ה לעשות ואשר/י. יישלח אימייל.', name: 'שם',
-    ownerCheck: 'בעלים (כל המלאים + צוות)', none: 'ללא', count: 'ספירה', manager: 'מנהל', owner: 'בעלים',
-    approve: 'אישור', rejectReq: 'דחיית הבקשה', removeTeam: 'הסרה מהצוות', block: 'חסימה (ניתוק מיידי)', unblock: 'ביטול חסימה',
-    emailReset: 'שליחת קישור לאיפוס סיסמה', emailSet: 'שליחת קישור לבחירת סיסמה', back: 'חזרה',
-    approvedToast: '{name} אושר/ה ✓ נשלח אימייל.', confirmReject: 'לדחות את הבקשה של {name}?',
-    confirmRemoveMember: 'להסיר את {name} מהצוות? החשבון ינותק.',
-    confirmBlock: 'לחסום את {name}? ניתוק מיידי, ללא אפשרות כניסה עד ביטול החסימה.',
-    rejected: 'נדחה', blockedToast: 'נחסם', unblockedToast: 'החסימה בוטלה', linkSent: 'קישור נשלח אל {email} ✓', linkCopied: 'הקישור הועתק ✓',
-    inviteText: 'הצטרפו לאפליקציית המלאי של זוטרה / אדרבה: פתחו את הקישור, לחצו "יצירת חשבון" והוסיפו למסך הבית.',
-    chooseInv: 'בחירת מלאי', off: 'בקרוב',
-    pwTip: 'לפחות 10 תווים. טיפ: 3–4 מילים, למשל "מרתף כחול שלישי".', pwShort: 'לפחות 10 תווים ({n}/10). טיפ: 3–4 מילים.',
-    pwWeak: 'חלשה – קל לנחש. נסה/י 3–4 מילים.', pwOk: 'סבירה', pwStrong: 'חזקה ✓',
-    noConn: 'אין חיבור. בדוק/י את האינטרנט ונסה/י שוב.', badServer: 'השרת לא ענה כראוי. נסה/י שוב.',
-    'type:Wine & Alcohol': 'יין ואלכוהול', 'type:Wine': 'יין', 'type:Alcohol': 'אלכוהול', 'type:Food': 'מטבח',
-    'unit:kg': 'ק״ג', 'unit:g': 'גרם', 'unit:L': 'ליטר', 'unit:piece': 'יחידה', 'unit:box': 'קרטון', 'unit:bottle': 'בקבוק',
-    months: ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'],
-    mon: ['ינו׳', 'פבר׳', 'מרץ', 'אפר׳', 'מאי', 'יוני', 'יולי', 'אוג׳', 'ספט׳', 'אוק׳', 'נוב׳', 'דצמ׳']
   }
 };
 
 /* Messages that come from the server (always in English) → translated. */
 const SERVER_MSG = [
-  [/^Wrong email or password/, { fr: 'E-mail ou mot de passe incorrect.', he: 'אימייל או סיסמה שגויים.' }],
-  [/waiting for approval/, { fr: 'Votre compte attend la validation d\'un propriétaire.', he: 'החשבון ממתין לאישור של אחד הבעלים.' }],
-  [/account is blocked/, { fr: 'Ce compte est bloqué. Demandez à un propriétaire.', he: 'החשבון חסום. פנה/י לאחד הבעלים.' }],
-  [/^Too many wrong passwords/, { fr: 'Trop d\'essais. Réessayez dans 15 minutes ou utilisez « Mot de passe oublié ».', he: 'יותר מדי ניסיונות. נסה/י שוב בעוד 15 דקות או השתמש/י ב"שכחת סיסמה".' }],
-  [/login has expired|Please log in/, { fr: 'Votre session a expiré. Reconnectez-vous.', he: 'פג תוקף ההתחברות. היכנס/י שוב.' }],
-  [/no longer active/, { fr: 'Ce compte n\'est plus actif.', he: 'החשבון כבר לא פעיל.' }],
-  [/already exists/, { fr: 'Un compte existe déjà avec cet e-mail. Connectez-vous ou utilisez « Mot de passe oublié ».', he: 'כבר קיים חשבון עם האימייל הזה. היכנס/י או השתמש/י ב"שכחת סיסמה".' }],
-  [/valid email/, { fr: 'Entrez un e-mail valide.', he: 'הכנס/י אימייל תקין.' }],
-  [/enter your name/, { fr: 'Entrez votre prénom.', he: 'הכנס/י את שמך.' }],
-  [/needs at least 10/, { fr: 'Le mot de passe doit faire au moins 10 caractères.', he: 'הסיסמה צריכה לפחות 10 תווים.' }],
-  [/too common|too easy|too simple|only numbers/, { fr: 'Mot de passe trop facile à deviner. Astuce : 3–4 mots, ex. « cave bleue mardi ».', he: 'הסיסמה קלה מדי לניחוש. טיפ: 3–4 מילים, למשל "מרתף כחול שלישי".' }],
-  [/link is not valid/, { fr: 'Ce lien n\'est plus valable. Demandez-en un nouveau avec « Mot de passe oublié ».', he: 'הקישור כבר לא בתוקף. בקש/י חדש דרך "שכחת סיסמה".' }],
-  [/current password is not correct/, { fr: 'Le mot de passe actuel est incorrect.', he: 'הסיסמה הנוכחית שגויה.' }],
-  [/Too many sign-up/, { fr: 'Trop de demandes en ce moment. Réessayez dans une heure.', he: 'יותר מדי בקשות כרגע. נסה/י שוב בעוד שעה.' }],
-  [/do not have access/, { fr: 'Vous n\'avez pas accès à ceci.', he: 'אין לך גישה לזה.' }],
-  [/Choose at least one inventory/, { fr: 'Choisissez au moins un inventaire avant de valider.', he: 'בחר/י לפחות מלאי אחד לפני האישור.' }],
-  [/at least one owner/, { fr: 'Il faut toujours au moins un propriétaire.', he: 'חייב להישאר לפחות בעלים אחד.' }],
-  [/Product not found/, { fr: 'Produit introuvable. Actualisez l\'app.', he: 'המוצר לא נמצא. רענן/י את האפליקציה.' }],
-  [/Choose a unit/, { fr: 'Choisissez une unité.', he: 'בחר/י יחידה.' }]
+  [/^Wrong email or password/, { fr: 'E-mail ou mot de passe incorrect.' }],
+  [/waiting for approval/, { fr: 'Votre compte attend la validation d\'un propriétaire.' }],
+  [/account is blocked/, { fr: 'Ce compte est bloqué. Demandez à un propriétaire.' }],
+  [/^Too many wrong passwords/, { fr: 'Trop d\'essais. Réessayez dans 15 minutes ou utilisez « Mot de passe oublié ».' }],
+  [/login has expired|Please log in/, { fr: 'Votre session a expiré. Reconnectez-vous.' }],
+  [/no longer active/, { fr: 'Ce compte n\'est plus actif.' }],
+  [/already exists/, { fr: 'Un compte existe déjà avec cet e-mail. Connectez-vous ou utilisez « Mot de passe oublié ».' }],
+  [/valid email/, { fr: 'Entrez un e-mail valide.' }],
+  [/enter your name/, { fr: 'Entrez votre prénom.' }],
+  [/needs at least 10/, { fr: 'Le mot de passe doit faire au moins 10 caractères.' }],
+  [/too common|too easy|too simple|only numbers/, { fr: 'Mot de passe trop facile à deviner. Astuce : 3–4 mots, ex. « cave bleue mardi ».' }],
+  [/link is not valid/, { fr: 'Ce lien n\'est plus valable. Demandez-en un nouveau avec « Mot de passe oublié ».' }],
+  [/current password is not correct/, { fr: 'Le mot de passe actuel est incorrect.' }],
+  [/Too many sign-up/, { fr: 'Trop de demandes en ce moment. Réessayez dans une heure.' }],
+  [/do not have access/, { fr: 'Vous n\'avez pas accès à ceci.' }],
+  [/Choose at least one inventory/, { fr: 'Choisissez au moins un inventaire avant de valider.' }],
+  [/at least one owner/, { fr: 'Il faut toujours au moins un propriétaire.' }],
+  [/Product not found/, { fr: 'Produit introuvable. Actualisez l\'app.' }],
+  [/Choose a unit/, { fr: 'Choisissez une unité.' }]
 ];
 
 let LANG = 'en';
@@ -214,12 +157,11 @@ function tUnit(u) { return t('unit:' + u); }
 function tMonth(m) { const p = String(m).split(' '); const i = TEXT.en.months.indexOf(p[0]); return i < 0 ? m : t('months')[i] + ' ' + p[1]; }
 function detectLang() {
   const n = (navigator.language || 'en').slice(0, 2).toLowerCase();
-  return n === 'he' || n === 'iw' ? 'he' : n === 'fr' ? 'fr' : 'en';
+  return n === 'fr' ? 'fr' : 'en';
 }
 /** Fills every element that has data-t="key" (text) or data-tp="key" (placeholder). */
 function applyTexts() {
   document.documentElement.lang = LANG;
-  document.documentElement.dir = LANG === 'he' ? 'rtl' : 'ltr';
   document.querySelectorAll('[data-t]').forEach(el => { el.textContent = t(el.dataset.t); });
   document.querySelectorAll('[data-tp]').forEach(el => { el.placeholder = t(el.dataset.tp); });
 }
