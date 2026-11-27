@@ -12,11 +12,22 @@
  *       Settings, History, Activity.
  */
 
-const INVENTORIES = [
-  { key: 'zoutra',         name: 'Zoutra',         tab: 'Zoutra',         prefix: 'Z'  },
-  { key: 'adraba-wine',    name: 'Adraba Wine',    tab: 'Adraba Wine',    prefix: 'AW' },
-  { key: 'adraba-alcohol', name: 'Adraba Alcohol', tab: 'Adraba Alcohol', prefix: 'AA' }
+// Restaurants and inventories are read from the "Restaurants" and "Inventories" tabs,
+// so a new restaurant or inventory can be added in the Sheet without changing code.
+// These defaults are used only if those tabs do not exist yet.
+const DEFAULT_RESTAURANTS = [
+  { name: 'Zoutra', colour: '#1e4d2b', logo: 'zoutra' },
+  { name: 'Adraba', colour: '#6b1f2e', logo: 'adraba' }
 ];
+const DEFAULT_INVENTORIES = [
+  { key: 'zoutra',         name: 'Zoutra',         restaurant: 'Zoutra', type: 'Wine & Alcohol', prefix: 'Z',  active: true  },
+  { key: 'adraba-wine',    name: 'Adraba Wine',    restaurant: 'Adraba', type: 'Wine',           prefix: 'AW', active: true  },
+  { key: 'adraba-alcohol', name: 'Adraba Alcohol', restaurant: 'Adraba', type: 'Alcohol',        prefix: 'AA', active: true  },
+  { key: 'zoutra-food',    name: 'Zoutra Food',    restaurant: 'Zoutra', type: 'Food',           prefix: 'ZF', active: false },
+  { key: 'adraba-food',    name: 'Adraba Food',    restaurant: 'Adraba', type: 'Food',           prefix: 'AF', active: false }
+];
+const UNITS = ['kg', 'g', 'L', 'piece', 'box', 'bottle'];
+const RESTAURANTS = 'Restaurants', INVENTORIES_TAB = 'Inventories';
 const USERS = 'Users', SESSIONS = 'Sessions', SETTINGS = 'Settings', HISTORY = 'History', ACTIVITY = 'Activity';
 const ROLES = { '': 0, 'count': 1, 'manager': 2 };
 const APP_URL_DEFAULT = 'https://arbahospitality.github.io/inventory/';
@@ -27,13 +38,10 @@ const HASH_ROUNDS = 2000;
 const MIN_PASSWORD = 10;
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
-// Users tab columns (1-based)
-const U = { name: 1, email: 2, status: 3, owner: 4, roles: 5 /* 5..7, one per inventory */,
-            hash: 5 + INVENTORIES.length, resetHash: 6 + INVENTORIES.length, resetExp: 7 + INVENTORIES.length,
-            created: 8 + INVENTORIES.length, approvedBy: 9 + INVENTORIES.length };
-const U_WIDTH = 9 + INVENTORIES.length;
-const USERS_HEADER = ['Name', 'Email', 'Status', 'Owner'].concat(INVENTORIES.map(i => i.name))
-  .concat(['Password (hashed)', 'Reset (hashed)', 'Reset expires', 'Created', 'Approved by']);
+// Users tab: columns are found by their header, so their order does not matter.
+// There is one access column per inventory (named like the inventory); missing ones are added.
+const UH = { name: 'Name', email: 'Email', status: 'Status', owner: 'Owner', hash: 'Password (hashed)',
+             resetHash: 'Reset (hashed)', resetExp: 'Reset expires', created: 'Created', approvedBy: 'Approved by' };
 
 /* ---------------- entry points ---------------- */
 
@@ -93,8 +101,33 @@ function sheet_(name) {
   if (!sh) throw new Error('Missing tab in the Sheet: ' + name);
   return sh;
 }
+let INV_ = null, REST_ = null;
+function yes_(v) { return /^(yes|y|true|1|oui|on)$/i.test(String(v).trim()); }
+function slug_(s) { return String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); }
+/** All inventories (also switched-off ones). */
+function allInventories_() {
+  if (INV_) return INV_;
+  const sh = ss_().getSheetByName(INVENTORIES_TAB);
+  if (!sh || sh.getLastRow() < 2) return (INV_ = DEFAULT_INVENTORIES.map(i => Object.assign({ tab: i.name }, i)));
+  INV_ = sh.getRange(2, 1, sh.getLastRow() - 1, 6).getValues().filter(r => String(r[1]).trim()).map(r => {
+    const name = String(r[1]).trim();
+    return { key: String(r[0]).trim() || slug_(name), name: name, tab: name, restaurant: String(r[2]).trim(),
+             type: String(r[3]).trim() || 'Wine', prefix: String(r[4]).trim() || name.slice(0, 2).toUpperCase(), active: yes_(r[5]) };
+  });
+  return INV_;
+}
+function inventories_() { return allInventories_().filter(i => i.active); }
+function restaurants_() {
+  if (REST_) return REST_;
+  const sh = ss_().getSheetByName(RESTAURANTS);
+  REST_ = (!sh || sh.getLastRow() < 2) ? DEFAULT_RESTAURANTS
+    : sh.getRange(2, 1, sh.getLastRow() - 1, 3).getValues().filter(r => String(r[0]).trim())
+        .map(r => ({ name: String(r[0]).trim(), colour: String(r[1]).trim() || '#1e4d2b', logo: String(r[2]).trim() }));
+  return REST_;
+}
+function isFood_(inv) { return /food|cuisine|nourriture/i.test(inv.type); }
 function inv_(key) {
-  const inv = INVENTORIES.find(i => i.key === key);
+  const inv = inventories_().find(i => i.key === key);
   if (!inv) throw new Error('Unknown inventory.');
   return inv;
 }
@@ -186,20 +219,40 @@ function weakPassword_(pw, name, email) {
 
 /* ---------------- users ---------------- */
 
+function userCols_() {
+  const sh = sheet_(USERS);
+  const head = sh.getRange(1, 1, 1, Math.max(sh.getLastColumn(), 1)).getValues()[0].map(x => String(x).trim());
+  const map = {};
+  head.forEach((h, i) => { if (h && !map[h]) map[h] = i + 1; });
+  return { map: map, width: head.length };
+}
+/** Adds any missing column (an access column for a new inventory, for example). */
+function ensureUserCols_() {
+  const sh = sheet_(USERS);
+  const need = Object.keys(UH).map(k => UH[k]).concat(allInventories_().map(i => i.name));
+  let cols = userCols_();
+  need.filter(h => !cols.map[h]).forEach(h => {
+    sh.getRange(1, cols.width + 1).setValue(h).setFontWeight('bold');
+    cols = userCols_();
+  });
+  return cols;
+}
 function readUsers_() {
   const sh = sheet_(USERS);
   const last = sh.getLastRow();
   if (last < 2) return [];
-  return sh.getRange(2, 1, last - 1, U_WIDTH).getValues().map((r, i) => {
+  const cols = userCols_(), m = cols.map;
+  const get = (r, h) => m[h] ? r[m[h] - 1] : '';
+  return sh.getRange(2, 1, last - 1, cols.width).getValues().map((r, i) => {
     const roles = {};
-    INVENTORIES.forEach((inv, j) => { roles[inv.key] = normRole_(r[U.roles - 1 + j]); });
+    allInventories_().forEach(inv => { roles[inv.key] = normRole_(get(r, inv.name)); });
     return {
-      row: i + 2, name: String(r[U.name - 1]).trim(), email: cleanEmail_(r[U.email - 1]),
-      status: String(r[U.status - 1]).trim() || 'Pending',
-      owner: /^(yes|y|true|1|owner)$/i.test(String(r[U.owner - 1]).trim()), roles: roles,
-      hash: String(r[U.hash - 1] || ''), resetHash: String(r[U.resetHash - 1] || ''),
-      resetExp: Number(r[U.resetExp - 1]) || 0, created: String(r[U.created - 1] || ''),
-      approvedBy: String(r[U.approvedBy - 1] || '')
+      row: i + 2, name: String(get(r, UH.name)).trim(), email: cleanEmail_(get(r, UH.email)),
+      status: String(get(r, UH.status)).trim() || 'Pending',
+      owner: /^(yes|y|true|1|owner)$/i.test(String(get(r, UH.owner)).trim()), roles: roles,
+      hash: String(get(r, UH.hash) || ''), resetHash: String(get(r, UH.resetHash) || ''),
+      resetExp: Number(get(r, UH.resetExp)) || 0, created: String(get(r, UH.created) || ''),
+      approvedBy: String(get(r, UH.approvedBy) || '')
     };
   }).filter(u => u.email);
 }
@@ -212,7 +265,16 @@ function normRole_(v) {
 }
 function roleOf_(user, key) { return user.owner ? 'manager' : (user.roles[key] || ''); }
 function roleLabel_(r) { return r === 'manager' ? 'Manager' : r === 'count' ? 'Count' : ''; }
-function setCells_(row, col, values) { sheet_(USERS).getRange(row, col, 1, values.length).setValues([values]); }
+/** Writes cells of one user row by header name: setUser_(5, { 'Status': 'Active' }). */
+function setUser_(row, values) {
+  const cols = ensureUserCols_(), sh = sheet_(USERS);
+  Object.keys(values).forEach(h => sh.getRange(row, cols.map[h]).setValue(values[h]));
+}
+function rolesCells_(roles) {
+  const o = {};
+  allInventories_().forEach(i => { o[i.name] = roleLabel_(normRole_((roles || {})[i.key])); });
+  return o;
+}
 
 function need_(user, key, min) {
   inv_(key);
@@ -221,10 +283,11 @@ function need_(user, key, min) {
 function owner_(user) { if (!user.owner) throw new Error('Only an owner can do this.'); }
 
 function me_(user) {
+  const invs = inventories_().filter(i => roleOf_(user, i.key));
   return {
     name: user.name, email: user.email, owner: user.owner,
-    inventories: INVENTORIES.filter(i => roleOf_(user, i.key))
-      .map(i => ({ key: i.key, name: i.name, role: roleOf_(user, i.key) }))
+    inventories: invs.map(i => ({ key: i.key, name: i.name, restaurant: i.restaurant, type: i.type, role: roleOf_(user, i.key) })),
+    restaurants: restaurants_().filter(r => invs.some(i => i.restaurant === r.name))
   };
 }
 
@@ -242,9 +305,11 @@ function register_(name, email, password) {
   cache.put('registrations', String(n + 1), 3600);
   return withLock_(() => {
     if (findUser_(email)) throw new Error('An account with this email already exists. Log in, or use "Forgot password".');
-    const row = new Array(U_WIDTH).fill('');
-    row[U.name - 1] = safe_(name); row[U.email - 1] = email; row[U.status - 1] = 'Pending'; row[U.owner - 1] = 'No';
-    row[U.hash - 1] = hashPassword_(password); row[U.created - 1] = now_();
+    const cols = ensureUserCols_();
+    const row = new Array(cols.width).fill('');
+    const put = (h, v) => { row[cols.map[h] - 1] = v; };
+    put(UH.name, safe_(name)); put(UH.email, email); put(UH.status, 'Pending'); put(UH.owner, 'No');
+    put(UH.hash, hashPassword_(password)); put(UH.created, now_());
     sheet_(USERS).appendRow(row);
     log_({ name: name }, '', 'Account requested', name, email);
     const owners = readUsers_().filter(u => u.owner && u.status === 'Active').map(u => u.email);
@@ -316,7 +381,7 @@ function changePassword_(user, s, current, password) {
   if (!checkPassword_(String(current || ''), user.hash)) throw new Error('Your current password is not correct.');
   checkNewPassword_(password, user.name, user.email);
   return withLock_(() => {
-    setCells_(user.row, U.hash, [hashPassword_(password)]);
+    setUser_(user.row, { [UH.hash]: hashPassword_(password) });
     revokeSessions_(user.email, s.hash);   // other phones are logged out
     log_(user, '', 'Changed own password', '', 'Other phones logged out');
     return true;
@@ -340,7 +405,7 @@ function forgot_(email) {
 function sendResetEmail_(u, welcome) {
   const token = randomToken_();
   const minutes = welcome ? 7 * 24 * 60 : RESET_MINUTES;
-  setCells_(u.row, U.resetHash, [sha256Hex_(token), Date.now() + minutes * 60000]);
+  setUser_(u.row, { [UH.resetHash]: sha256Hex_(token), [UH.resetExp]: Date.now() + minutes * 60000 });
   const link = appUrl_() + '?reset=' + encodeURIComponent(token) + '&e=' + encodeURIComponent(u.email);
   const subject = welcome ? 'Inventory app: set your password' : 'Inventory app: reset your password';
   const body = (welcome
@@ -358,7 +423,7 @@ function resetPassword_(email, token, password) {
       throw new Error('This link is not valid any more. Ask for a new one with "Forgot password".');
     }
     checkNewPassword_(password, u.name, u.email);
-    setCells_(u.row, U.hash, [hashPassword_(password), '', '']);
+    setUser_(u.row, { [UH.hash]: hashPassword_(password), [UH.resetHash]: '', [UH.resetExp]: '' });
     revokeSessions_(u.email, null);
     log_(u, '', 'Reset password', '', 'By email link');
     return { status: u.status };
@@ -371,9 +436,8 @@ function listUsers_() {
   return readUsers_().map(u => ({ name: u.name, email: u.email, status: u.status, owner: u.owner, roles: u.roles,
     created: u.created, approvedBy: u.approvedBy, hasPassword: !!u.hash }));
 }
-function rolesRow_(roles) { return INVENTORIES.map(i => roleLabel_(normRole_((roles || {})[i.key]))); }
 function accessText_(owner, roles) {
-  return owner ? 'Owner' : INVENTORIES.map(i => roles[i.key] ? i.name + ': ' + roleLabel_(roles[i.key]) : '').filter(Boolean).join(', ') || 'No access';
+  return owner ? 'Owner' : allInventories_().map(i => roles[i.key] ? i.name + ': ' + roleLabel_(roles[i.key]) : '').filter(Boolean).join(', ') || 'No access';
 }
 function activeOwners_(users) { return users.filter(x => x.owner && x.status === 'Active'); }
 
@@ -382,11 +446,10 @@ function approveUser_(me, email, roles, owner) {
     const u = findUser_(email);
     if (!u) throw new Error('Team member not found.');
     if (u.status !== 'Pending') throw new Error('This account is not waiting for approval.');
-    const rr = rolesRow_(roles);
-    if (!owner && !rr.some(Boolean)) throw new Error('Choose at least one inventory before approving.');
-    setCells_(u.row, U.status, ['Active', owner ? 'Yes' : 'No'].concat(rr));
-    setCells_(u.row, U.approvedBy, [safe_(me.name)]);
-    const r = {}; INVENTORIES.forEach((i, j) => { r[i.key] = normRole_(rr[j]); });
+    const rc = rolesCells_(roles);
+    if (!owner && !Object.keys(rc).some(k => rc[k])) throw new Error('Choose at least one inventory before approving.');
+    setUser_(u.row, Object.assign({ [UH.status]: 'Active', [UH.owner]: owner ? 'Yes' : 'No', [UH.approvedBy]: safe_(me.name) }, rc));
+    const r = {}; allInventories_().forEach(i => { r[i.key] = normRole_((roles || {})[i.key]); });
     log_(me, '', 'Approved team member', u.name, accessText_(!!owner, r));
     MailApp.sendEmail(u.email, 'Inventory app: your account is approved',
       'Hello ' + u.name + ',\n\nYour account has been approved. You can now log in:\n' + appUrl_(), { name: 'Inventory app' });
@@ -404,9 +467,8 @@ function saveUser_(me, x) {
     if (!name) throw new Error('Please enter a name.');
     const owner = !!x.owner;
     if (u.owner && !owner && activeOwners_(users).length === 1 && u.status === 'Active') throw new Error('There must always be at least one owner.');
-    setCells_(u.row, U.name, [safe_(name)]);
-    setCells_(u.row, U.owner, [owner ? 'Yes' : 'No'].concat(rolesRow_(x.roles)));
-    const r = {}; INVENTORIES.forEach(i => { r[i.key] = normRole_((x.roles || {})[i.key]); });
+    setUser_(u.row, Object.assign({ [UH.name]: safe_(name), [UH.owner]: owner ? 'Yes' : 'No' }, rolesCells_(x.roles)));
+    const r = {}; allInventories_().forEach(i => { r[i.key] = normRole_((x.roles || {})[i.key]); });
     log_(me, '', 'Edited team member', name, accessText_(owner, r) + (u.name !== name ? ' (was ' + u.name + ')' : ''));
     return listUsers_();
   });
@@ -419,7 +481,7 @@ function setBlocked_(me, email, blocked) {
     if (!u) throw new Error('Team member not found.');
     if (u.email === me.email) throw new Error('You cannot block yourself.');
     if (blocked && u.owner && activeOwners_(users).length === 1) throw new Error('There must always be at least one owner.');
-    setCells_(u.row, U.status, [blocked ? 'Blocked' : 'Active']);
+    setUser_(u.row, { [UH.status]: blocked ? 'Blocked' : 'Active' });
     if (blocked) revokeSessions_(u.email, null);
     log_(me, '', blocked ? 'Blocked team member' : 'Unblocked team member', u.name, blocked ? 'Logged out everywhere' : '');
     return listUsers_();
@@ -465,17 +527,19 @@ function categories_(inv) {
   return getSetting_('Categories: ' + inv.name).split(',').map(s => s.trim()).filter(Boolean);
 }
 
-// Product tabs: ID | Category | Supplier | Product Name | Q | H.T | Value | Counted by | Counted at
+// Product tabs: ID | Category | Supplier | Product Name | Q | H.T | Value | Counted by | Counted at | Unit
 function readProducts_(inv) {
   const sh = sheet_(inv.tab);
   const last = sh.getLastRow();
   if (last < 2) return [];
-  return sh.getRange(2, 1, last - 1, 9).getValues()
+  const food = isFood_(inv);
+  return sh.getRange(2, 1, last - 1, 10).getValues()
     .filter(r => r[0] !== '' && r[3] !== '')
     .map(r => ({
       id: String(r[0]), category: String(r[1]), supplier: String(r[2]), name: String(r[3]),
       q: r[4] === '' ? null : Number(r[4]), price: Number(r[5]) || 0,
-      by: String(r[7] || ''), at: r[8] instanceof Date ? Utilities.formatDate(r[8], 'Europe/Paris', 'yyyy-MM-dd HH:mm') : String(r[8] || '')
+      by: String(r[7] || ''), at: r[8] instanceof Date ? Utilities.formatDate(r[8], 'Europe/Paris', 'yyyy-MM-dd HH:mm') : String(r[8] || ''),
+      unit: food ? (String(r[9] || '').trim() || 'piece') : 'bottle'
     }));
 }
 
@@ -484,7 +548,8 @@ function getInventory_(key) {
   const products = readProducts_(inv);
   const cats = categories_(inv);
   products.forEach(p => { if (p.category && cats.indexOf(p.category) < 0) cats.push(p.category); });
-  return { key: inv.key, name: inv.name, categories: cats, products: products };
+  return { key: inv.key, name: inv.name, restaurant: inv.restaurant, type: inv.type, food: isFood_(inv),
+           units: isFood_(inv) ? UNITS : [], categories: cats, products: products };
 }
 
 function findRow_(inv, id) {
@@ -512,18 +577,23 @@ function saveCount_(user, key, id, q) {
   });
 }
 
-function cleanProduct_(p) {
+function cleanProduct_(p, inv) {
   const name = String(p.name || '').trim().slice(0, 120);
   const category = String(p.category || '').trim().slice(0, 40);
   if (!name || !category) throw new Error('Name and category are required.');
   const price = Number(p.price) || 0;
   if (price < 0 || price > 100000) throw new Error('Not a valid price.');
-  return { name: name, category: category, supplier: String(p.supplier || '').trim().slice(0, 60), price: price };
+  let unit = '';
+  if (isFood_(inv)) {
+    unit = String(p.unit || '').trim();
+    if (UNITS.indexOf(unit) < 0) throw new Error('Choose a unit.');
+  }
+  return { name: name, category: category, supplier: String(p.supplier || '').trim().slice(0, 60), price: price, unit: unit };
 }
 
 function addProduct_(user, key, p) {
   const inv = inv_(key);
-  const c = cleanProduct_(p);
+  const c = cleanProduct_(p, inv);
   return withLock_(() => {
     const sh = sheet_(inv.tab);
     let max = 0;
@@ -544,26 +614,28 @@ function addProduct_(user, key, p) {
     }
     sh.insertRowAfter(Math.max(after, 1));
     sh.getRange(after + 1, 1, 1, 6).setValues([[id, safe_(c.category), safe_(c.supplier), safe_(c.name), '', c.price]]);
-    sh.getRange(after + 1, 8, 1, 2).setValues([['', '']]);
-    log_(user, inv.name, 'Added product', c.name, [c.category, c.supplier, c.price.toFixed(2) + ' €'].filter(Boolean).join(' · '));
+    sh.getRange(after + 1, 8, 1, 3).setValues([['', '', c.unit]]);
+    log_(user, inv.name, 'Added product', c.name, [c.category, c.supplier, c.price.toFixed(2) + ' €' + (c.unit ? ' / ' + c.unit : '')].filter(Boolean).join(' · '));
     return getInventory_(key);
   });
 }
 
 function updateProduct_(user, key, p) {
   const inv = inv_(key);
-  const c = cleanProduct_(p);
+  const c = cleanProduct_(p, inv);
   return withLock_(() => {
     const row = findRow_(inv, p.id);
     const sh = sheet_(inv.tab);
-    const old = sh.getRange(row, 1, 1, 6).getValues()[0];
+    const old = sh.getRange(row, 1, 1, 10).getValues()[0];
     sh.getRange(row, 2, 1, 3).setValues([[safe_(c.category), safe_(c.supplier), safe_(c.name)]]);
     sh.getRange(row, 6).setValue(c.price);
+    if (c.unit) sh.getRange(row, 10).setValue(c.unit);
     const changes = [];
     if (String(old[3]) !== c.name) changes.push('name: ' + old[3] + ' → ' + c.name);
     if (String(old[1]) !== c.category) changes.push('category: ' + old[1] + ' → ' + c.category);
     if (String(old[2]) !== c.supplier) changes.push('supplier: ' + old[2] + ' → ' + c.supplier);
     if (Number(old[5]) !== c.price) changes.push('price: ' + Number(old[5]).toFixed(2) + ' → ' + c.price.toFixed(2) + ' €');
+    if (c.unit && String(old[9]) !== c.unit) changes.push('unit: ' + (old[9] || '–') + ' → ' + c.unit);
     if (changes.length) log_(user, inv.name, 'Edited product', c.name, changes.join('; '));
     return getInventory_(key);
   });
@@ -614,12 +686,13 @@ function send_(user, key, month, xlsxBase64) {
   const blob = Utilities.newBlob(bytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', fileName);
 
   const products = readProducts_(inv);
+  const food = isFood_(inv);
   const missing = products.filter(p => p.q === null).length;
   const bottles = products.reduce((s, p) => s + (p.q || 0), 0);
   const value = products.reduce((s, p) => s + (p.q || 0) * p.price, 0);
   const body =
     'Hello,\n\nPlease find attached the ' + inv.name + ' inventory for ' + month + '.\n\n' +
-    'Total bottles: ' + round2_(bottles) + '\n' +
+    (food ? 'Products counted: ' + (products.length - missing) + ' / ' + products.length + '\n' : 'Total bottles: ' + round2_(bottles) + '\n') +
     'Total value (H.T): ' + round2_(value).toFixed(2) + ' EUR\n' +
     'Sent by: ' + user.name + '\n' +
     (missing ? 'Not counted: ' + missing + ' products (sent as 0)\n' : '') +
@@ -632,10 +705,10 @@ function send_(user, key, month, xlsxBase64) {
 
   const now = now_();
   const hist = products.map(p => [inv.name, month, now, safe_(user.name), p.id, safe_(p.category), safe_(p.supplier), safe_(p.name),
-    p.q === null ? 0 : p.q, p.price, round2_((p.q || 0) * p.price)]);
+    p.q === null ? 0 : p.q, p.price, round2_((p.q || 0) * p.price), p.unit]);
   const hs = sheet_(HISTORY);
   if (hist.length) hs.getRange(hs.getLastRow() + 1, 1, hist.length, hist[0].length).setValues(hist);
-  log_(user, inv.name, 'Sent to office', month, 'To ' + to + (cc ? ' (copy ' + cc + ')' : '') + ' · ' + round2_(bottles) + ' bottles · ' + round2_(value).toFixed(2) + ' €' + (missing ? ' · ' + missing + ' not counted' : ''));
+  log_(user, inv.name, 'Sent to office', month, 'To ' + to + (cc ? ' (copy ' + cc + ')' : '') + ' · ' + (food ? '' : round2_(bottles) + ' bottles · ') + '' + round2_(value).toFixed(2) + ' €' + (missing ? ' · ' + missing + ' not counted' : ''));
 
   return { to: to, cc: cc, bottles: round2_(bottles), value: round2_(value) };
 }
@@ -649,21 +722,20 @@ function authorize() {
 }
 
 /**
- * Run once from the editor: switches the Users tab to accounts, creates the
- * Sessions tab, and emails the owners listed below a link to set their password.
+ * Run once from the editor (already done on 27 Nov 2026): resets the Users tab to the two
+ * owners, creates the Sessions tab, and emails them a link to set their password.
  */
 function setupAccounts() {
   const owners = [['David', 'david@adraba-paris.com'], ['Eden', 'eden@adraba-paris.com']];
   const ss = ss_();
   const users = ss.getSheetByName(USERS);
   users.clear();
-  users.getRange(1, 1, 1, USERS_HEADER.length).setValues([USERS_HEADER]).setFontWeight('bold');
+  const head = Object.keys(UH).map(k => UH[k]).concat(allInventories_().map(i => i.name));
+  users.getRange(1, 1, 1, head.length).setValues([head]).setFontWeight('bold');
   users.setFrozenRows(1);
   owners.forEach(([name, email]) => {
-    const row = new Array(U_WIDTH).fill('');
-    row[U.name - 1] = name; row[U.email - 1] = email; row[U.status - 1] = 'Active'; row[U.owner - 1] = 'Yes';
-    INVENTORIES.forEach((_, j) => { row[U.roles - 1 + j] = 'Manager'; });
-    row[U.created - 1] = now_(); row[U.approvedBy - 1] = 'Setup';
+    const row = head.map(h => h === UH.name ? name : h === UH.email ? email : h === UH.status ? 'Active' : h === UH.owner ? 'Yes'
+      : h === UH.created ? now_() : h === UH.approvedBy ? 'Setup' : allInventories_().some(i => i.name === h) ? 'Manager' : '');
     users.appendRow(row);
   });
   let sessions = ss.getSheetByName(SESSIONS);
@@ -672,6 +744,48 @@ function setupAccounts() {
   sessions.getRange(1, 1, 1, 5).setValues([['Token (hashed)', 'Email', 'Created', 'Expires (ms)', 'Device']]).setFontWeight('bold');
   sessions.setFrozenRows(1);
   readUsers_().forEach(u => sendResetEmail_(u, true));
+}
+
+/**
+ * Run once from the editor: adds the Restaurants and Inventories tabs (edit them to add a
+ * restaurant or switch an inventory on), the food tabs (switched off), the Unit columns,
+ * and the access columns in Users. Safe to run again: it never deletes anything.
+ */
+function setupRestaurants() {
+  const ss = ss_();
+  const bold = (sh, row) => sh.getRange(1, 1, 1, row.length).setValues([row]).setFontWeight('bold');
+  let r = ss.getSheetByName(RESTAURANTS);
+  if (!r) {
+    r = ss.insertSheet(RESTAURANTS);
+    bold(r, ['Restaurant', 'Colour', 'Logo']);
+    DEFAULT_RESTAURANTS.forEach(x => r.appendRow([x.name, x.colour, x.logo]));
+    r.setFrozenRows(1);
+  }
+  let t = ss.getSheetByName(INVENTORIES_TAB);
+  if (!t) {
+    t = ss.insertSheet(INVENTORIES_TAB);
+    bold(t, ['Key', 'Inventory (tab name)', 'Restaurant', 'Type', 'ID prefix', 'Active']);
+    DEFAULT_INVENTORIES.forEach(x => t.appendRow([x.key, x.name, x.restaurant, x.type, x.prefix, x.active ? 'Yes' : 'No']));
+    t.setFrozenRows(1);
+  }
+  INV_ = null; REST_ = null;
+  allInventories_().forEach(inv => {
+    let sh = ss.getSheetByName(inv.tab);
+    if (!sh) {
+      sh = ss.insertSheet(inv.tab);
+      bold(sh, ['ID', 'Category', 'Supplier', 'Product Name', 'Q', 'H.T', 'Value', 'Counted by', 'Counted at', 'Unit']);
+      sh.getRange('G1').setFormula('={"Value";ARRAYFORMULA(IF(E2:E="";"";E2:E*F2:F))}');
+      sh.setFrozenRows(1);
+    } else if (!String(sh.getRange(1, 10).getValue())) {
+      sh.getRange(1, 10).setValue('Unit').setFontWeight('bold');
+    }
+    if (!getSetting_('Categories: ' + inv.name) && isFood_(inv)) {
+      sheet_(SETTINGS).appendRow(['Categories: ' + inv.name, 'Viande, Poisson, Légumes et fruits, Crèmerie, Épicerie, Surgelés, Boulangerie, Boissons', '']);
+    }
+  });
+  const h = sheet_(HISTORY);
+  if (!String(h.getRange(1, 12).getValue())) h.getRange(1, 12).setValue('Unit').setFontWeight('bold');
+  ensureUserCols_();
 }
 
 /* ---------------- common passwords ---------------- */
