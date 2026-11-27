@@ -1,7 +1,7 @@
 /* Inventory app – phone front end. Talks to the Apps Script API in config.js. */
 
-let CODE = '', ME = null, CUR = null, DATA = null, CAT = 'ALL', EDIT_ID = null;
-let TEAM = [], MEMBER = null;
+let TOKEN = '', ME = null, CUR = null, DATA = null, CAT = 'ALL', EDIT_ID = null;
+let TEAM = [], MEMBER = null, RESET = null;
 const pending = {};
 let inflight = 0;
 
@@ -22,62 +22,85 @@ const role = () => (ME && CUR) ? (ME.inventories.find(i => i.key === CUR) || {})
 const isMgr = () => role() === 'manager';
 
 async function api(action, params) {
-  const body = JSON.stringify(Object.assign({ action: action, code: CODE }, params || {}));
+  const body = JSON.stringify(Object.assign({ action: action, token: TOKEN }, params || {}));
   let res;
   try { res = await fetch(API_URL, { method: 'POST', body: body }); }
   catch (e) { throw new Error('No connection. Check your internet and try again.'); }
   let j;
   try { j = await res.json(); } catch (e) { throw new Error('The server did not answer correctly. Try again.'); }
   if (!j.ok) {
-    if (/Wrong code/.test(j.error) && action !== 'login') { logout(true); }
-    throw new Error(j.error);
+    const msg = String(j.error || 'Something went wrong.').replace(/^AUTH: /, '');
+    if (j.auth) { logout(true); showAuth('login', msg); }
+    throw new Error(msg);
   }
   return j.data;
 }
 
-/* ---------------- login ---------------- */
-let pin = '';
-function buildKeypad() {
-  const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '⌫', '0', 'OK'];
-  $('keypad').innerHTML = keys.map(k =>
-    `<button class="${k === 'OK' ? 'ok' : k === '⌫' ? 'small' : ''}" data-k="${k}">${k}</button>`).join('');
-  $('keypad').onclick = e => { const k = e.target.dataset && e.target.dataset.k; if (k) press(k); };
-  document.addEventListener('keydown', e => {
-    if ($('login').classList.contains('hidden')) return;
-    if (/^\d$/.test(e.key)) press(e.key); else if (e.key === 'Backspace') press('⌫'); else if (e.key === 'Enter') press('OK');
-  });
+/* ---------------- login / register / forgot / reset ---------------- */
+function showAuth(pane, msg, ok) {
+  ['login', 'register', 'forgot', 'reset', 'done'].forEach(p => $('a-' + p).classList.toggle('hidden', p !== pane));
+  const m = $('authMsg'); m.textContent = msg || ''; m.className = 'auth-msg' + (msg ? (ok ? ' ok' : ' err') : '');
+  $('main').classList.add('hidden'); $('login').classList.remove('hidden');
 }
-function drawPin() { $('pinDots').innerHTML = Array.from({ length: Math.max(6, pin.length) }, (_, i) => `<span class="${i < pin.length ? 'on' : ''}"></span>`).join(''); }
-function press(k) {
-  const lbl = $('pinLabel'); lbl.classList.remove('err'); lbl.textContent = 'Enter your code';
-  if (k === '⌫') pin = pin.slice(0, -1);
-  else if (k === 'OK') return submitPin();
-  else if (pin.length < 12) pin += k;
-  drawPin();
-}
-async function submitPin() {
-  if (pin.length < 4) { $('pinLabel').textContent = 'Codes have at least 4 digits'; $('pinLabel').classList.add('err'); return; }
-  CODE = pin; busy(true);
+function authBusy(btn, on, label) { btn.disabled = on; if (on) { btn._t = btn.textContent; btn.textContent = label || 'Please wait…'; } else if (btn._t) btn.textContent = btn._t; }
+function deviceName() { const u = navigator.userAgent; return /iPhone/.test(u) ? 'iPhone' : /iPad/.test(u) ? 'iPad' : /Android/.test(u) ? 'Android' : 'Computer'; }
+
+async function doLogin() {
+  const email = $('lEmail').value.trim(), password = $('lPass').value;
+  if (!email || !password) return showAuth('login', 'Enter your email and password.');
+  const b = $('lBtn'); authBusy(b, true, 'Logging in…');
   try {
-    ME = await api('login');
-    store.set('inv.code', CODE);
-    pin = ''; drawPin();
+    const r = await api('login', { email: email, password: password, device: deviceName() });
+    TOKEN = r.token; ME = r.me; store.set('inv.token', TOKEN); store.set('inv.email', email);
+    $('lPass').value = '';
     await enterApp();
-  } catch (e) {
-    CODE = ''; pin = ''; drawPin();
-    $('pinLabel').textContent = e.message; $('pinLabel').classList.add('err');
-  } finally { busy(false); }
+  } catch (e) { showAuth('login', e.message); } finally { authBusy(b, false); }
+}
+async function doRegister() {
+  const name = $('rName').value.trim(), email = $('rEmail').value.trim(), p1 = $('rPass').value, p2 = $('rPass2').value;
+  if (!name || !email) return showAuth('register', 'Enter your name and email.');
+  if (p1.length < 8) return showAuth('register', 'The password needs at least 8 characters.');
+  if (p1 !== p2) return showAuth('register', 'The two passwords are different.');
+  const b = $('rBtn'); authBusy(b, true, 'Sending…');
+  try {
+    await api('register', { name: name, email: email, password: p1 });
+    store.set('inv.email', email); $('lEmail').value = email; $('rPass').value = $('rPass2').value = '';
+    $('doneText').textContent = 'Thanks ' + name + '! Your request was sent. You will get an email as soon as an owner approves it, then you can log in.';
+    showAuth('done');
+  } catch (e) { showAuth('register', e.message); } finally { authBusy(b, false); }
+}
+async function doForgot() {
+  const email = $('fEmail').value.trim();
+  if (!email) return showAuth('forgot', 'Enter your email.');
+  const b = $('fBtn'); authBusy(b, true, 'Sending…');
+  try {
+    await api('forgot', { email: email });
+    $('doneText').textContent = 'If an account exists for ' + email + ', we sent it a link to choose a new password. Check your inbox (and spam). The link works for 1 hour.';
+    showAuth('done');
+  } catch (e) { showAuth('forgot', e.message); } finally { authBusy(b, false); }
+}
+async function doReset() {
+  const p1 = $('xPass').value, p2 = $('xPass2').value;
+  if (p1.length < 8) return showAuth('reset', 'The password needs at least 8 characters.');
+  if (p1 !== p2) return showAuth('reset', 'The two passwords are different.');
+  const b = $('xBtn'); authBusy(b, true, 'Saving…');
+  try {
+    const r = await api('resetPassword', { email: RESET.email, token: RESET.token, password: p1 });
+    $('lEmail').value = RESET.email; store.set('inv.email', RESET.email); RESET = null;
+    $('xPass').value = $('xPass2').value = '';
+    showAuth('login', r.status === 'Pending' ? 'Password saved. Your account still needs an owner\'s approval.' : 'Password saved ✓ You can log in now.', true);
+  } catch (e) { showAuth('reset', e.message); } finally { authBusy(b, false); }
 }
 function logout(silent) {
-  store.set('inv.code', null);
-  CODE = ''; ME = null; DATA = null; CUR = null; closeAll();
-  $('main').classList.add('hidden'); $('login').classList.remove('hidden');
-  if (silent) { $('pinLabel').textContent = 'Please enter your code again'; }
+  if (!silent && TOKEN) api('logout').catch(() => {});
+  store.set('inv.token', null); store.set('inv.code', null);
+  TOKEN = ''; ME = null; DATA = null; CUR = null; closeAll();
+  showAuth('login');
 }
 
 /* ---------------- app ---------------- */
 async function enterApp() {
-  if (!ME.inventories.length) { logout(); $('pinLabel').textContent = 'You have no inventory yet. Ask an owner.'; $('pinLabel').classList.add('err'); return; }
+  if (!ME.inventories.length) { logout(); showAuth('login', 'You have no inventory yet. Ask an owner.'); return; }
   $('login').classList.add('hidden'); $('main').classList.remove('hidden');
   const last = store.get('inv.last');
   CUR = ME.inventories.some(i => i.key === last) ? last : ME.inventories[0].key;
@@ -290,7 +313,7 @@ async function send() {
   const b = $('sendBtn'); b.disabled = true; b.textContent = 'Sending…';
   try {
     const x = buildXlsx(month);
-    const r = await api('send', { inv: CUR, month: month, xlsx: x.b64, fileName: x.name });
+    const r = await api('send', { inv: CUR, month: month, xlsx: x.b64 });
     closeAll(); toast('Sent to ' + r.to + ' ✓', 4500);
   } catch (e) { toast(e.message || 'Sending failed', 4500); }
   finally { b.disabled = false; b.textContent = 'Send to office'; }
@@ -341,14 +364,14 @@ async function removeProduct() {
   catch (e) { toast(e.message, 4000); } finally { busy(false); }
 }
 
-/* ---------------- my code ---------------- */
-function openChangeCode() { $('cNew').value = ''; $('cNew2').value = ''; open('codeSheet'); }
-async function changeCode() {
-  const n = $('cNew').value.trim(), n2 = $('cNew2').value.trim();
-  if (n.length < 4) return toast('The new code needs at least 4 characters.');
-  if (n !== n2) return toast('The two codes are different.');
+/* ---------------- my password ---------------- */
+function openChangePass() { $('cCur').value = $('cNew').value = $('cNew2').value = ''; open('codeSheet'); }
+async function changePass() {
+  const cur = $('cCur').value, n = $('cNew').value, n2 = $('cNew2').value;
+  if (n.length < 8) return toast('The new password needs at least 8 characters.');
+  if (n !== n2) return toast('The two passwords are different.');
   const b = $('cBtn'); b.disabled = true;
-  try { await api('changeMyCode', { newCode: n }); CODE = n; store.set('inv.code', n); closeAll(); toast('Code changed ✓'); }
+  try { await api('changePassword', { current: cur, password: n }); closeAll(); toast('Password changed ✓ Other phones are logged out.', 3500); }
   catch (e) { toast(e.message, 4000); } finally { b.disabled = false; }
 }
 
@@ -364,17 +387,32 @@ function roleSummary(u) {
   const parts = Object.keys(INV_NAMES).filter(k => u.roles[k]).map(k => INV_NAMES[k] + ': ' + (u.roles[k] === 'manager' ? 'Manager' : 'Count'));
   return parts.length ? parts.join(' · ') : 'No access yet';
 }
+function memberBtn(u) {
+  const i = TEAM.indexOf(u);
+  const tag = u.status === 'Blocked' ? ' <span class="tag red">Blocked</span>' : '';
+  const sub = u.status === 'Pending' ? esc(u.email) + ' · asked ' + esc(when(u.created)) : esc(roleSummary(u)) + (u.hasPassword ? '' : ' · no password yet');
+  return `<button class="member" onclick="openMember(${i})"><span><b>${esc(u.name)}${tag}</b><small>${sub}</small></span><span>›</span></button>`;
+}
 function drawTeam() {
-  $('teamList').innerHTML = TEAM.map((u, i) =>
-    `<button class="member" onclick="openMember(${i})"><span><b>${esc(u.name)}</b><small>${esc(roleSummary(u))}</small></span><span>›</span></button>`).join('')
-    || '<p class="muted">No team members yet.</p>';
+  const pend = TEAM.filter(u => u.status === 'Pending'), rest = TEAM.filter(u => u.status !== 'Pending');
+  $('teamList').innerHTML =
+    (pend.length ? `<div class="team-head">Waiting for approval (${pend.length})</div>` + pend.map(memberBtn).join('') : '') +
+    (pend.length ? '<div class="team-head">Team</div>' : '') + (rest.map(memberBtn).join('') || '<p class="muted">No team members yet.</p>');
 }
 function openMember(i) {
-  MEMBER = i === null ? { name: '', code: '', owner: false, roles: {} } : JSON.parse(JSON.stringify(TEAM[i]));
-  MEMBER.originalName = i === null ? null : TEAM[i].name;
-  $('mTitle').textContent = i === null ? 'Add a team member' : 'Edit ' + MEMBER.name;
-  $('mName').value = MEMBER.name; $('mCode').value = MEMBER.code; $('mOwner').checked = MEMBER.owner;
-  $('mRemove').classList.toggle('hidden', i === null || MEMBER.name === ME.name);
+  MEMBER = JSON.parse(JSON.stringify(TEAM[i]));
+  const pend = MEMBER.status === 'Pending', mine = MEMBER.email === ME.email;
+  $('mTitle').textContent = pend ? 'Approve ' + MEMBER.name + '?' : MEMBER.name;
+  $('mName').value = MEMBER.name; $('mEmail').textContent = MEMBER.email; $('mOwner').checked = MEMBER.owner;
+  $('mNameWrap').classList.toggle('hidden', pend);
+  $('mHint').textContent = pend ? 'Choose what ' + MEMBER.name + ' can do, then approve. They get an email.' : '';
+  $('mSave').textContent = pend ? 'Approve' : 'Save';
+  $('mRemove').textContent = pend ? 'Reject request' : 'Remove from team';
+  $('mRemove').classList.toggle('hidden', mine);
+  $('mBlock').textContent = MEMBER.status === 'Blocked' ? 'Unblock' : 'Block (logs them out now)';
+  $('mBlock').classList.toggle('hidden', pend || mine);
+  $('mReset').textContent = MEMBER.hasPassword ? 'Email a password reset link' : 'Email a "set your password" link';
+  $('mReset').classList.toggle('hidden', pend || MEMBER.status === 'Blocked');
   drawRoles(); open('memberSheet');
 }
 function drawRoles() {
@@ -384,27 +422,50 @@ function drawRoles() {
       <div class="seg ${MEMBER.owner ? 'disabled' : ''}">${opts.map(([v, l]) =>
         `<button class="${(MEMBER.owner ? 'manager' : (MEMBER.roles[k] || '')) === v ? 'on' : ''}" onclick="setRole('${k}','${v}')">${l}</button>`).join('')}</div></div>`).join('');
 }
-function setRole(k, v) { MEMBER.roles[k] = v; drawRoles(); }
+function setRole(k, v) { if (!MEMBER.owner) { MEMBER.roles[k] = v; drawRoles(); } }
 function ownerToggle() { MEMBER.owner = $('mOwner').checked; drawRoles(); }
 async function saveMember() {
-  MEMBER.name = $('mName').value.trim(); MEMBER.code = $('mCode').value.trim(); MEMBER.owner = $('mOwner').checked;
-  if (!MEMBER.name) return toast('Please enter a name.');
-  if (MEMBER.code.length < 4) return toast('The code needs at least 4 characters.');
+  MEMBER.owner = $('mOwner').checked;
   const b = $('mSave'); b.disabled = true;
   try {
-    TEAM = await api('saveUser', { user: MEMBER });
-    if (MEMBER.originalName === ME.name) { // my own row changed
-      if (MEMBER.code !== CODE) { CODE = MEMBER.code; store.set('inv.code', CODE); }
-      ME = await api('login');
+    if (MEMBER.status === 'Pending') {
+      TEAM = await api('approveUser', { email: MEMBER.email, roles: MEMBER.roles, owner: MEMBER.owner });
+      toast(MEMBER.name + ' approved ✓ They got an email.', 3500);
+    } else {
+      MEMBER.name = $('mName').value.trim();
+      if (!MEMBER.name) { b.disabled = false; return toast('Please enter a name.'); }
+      TEAM = await api('saveUser', { user: { email: MEMBER.email, name: MEMBER.name, owner: MEMBER.owner, roles: MEMBER.roles } });
+      if (MEMBER.email === ME.email) ME = await api('me');
+      toast('Saved ✓');
     }
-    drawTeam(); open('teamSheet'); toast('Saved ✓');
+    drawTeam(); open('teamSheet');
   } catch (e) { toast(e.message, 4000); } finally { b.disabled = false; }
 }
 async function removeMember() {
-  if (!confirm('Remove ' + MEMBER.originalName + ' from the team? Their code will stop working.')) return;
+  const pend = MEMBER.status === 'Pending';
+  if (!confirm(pend ? 'Reject the request from ' + MEMBER.name + '?' : 'Remove ' + MEMBER.name + ' from the team? They will be logged out.')) return;
   busy(true);
-  try { TEAM = await api('removeUser', { name: MEMBER.originalName }); drawTeam(); open('teamSheet'); toast('Removed'); }
+  try { TEAM = await api('removeUser', { email: MEMBER.email }); drawTeam(); open('teamSheet'); toast(pend ? 'Rejected' : 'Removed'); }
   catch (e) { toast(e.message, 4000); } finally { busy(false); }
+}
+async function blockMember() {
+  const block = MEMBER.status !== 'Blocked';
+  if (block && !confirm('Block ' + MEMBER.name + '? They are logged out right away and cannot log in until unblocked.')) return;
+  busy(true);
+  try { TEAM = await api('setBlocked', { email: MEMBER.email, blocked: block }); drawTeam(); open('teamSheet'); toast(block ? 'Blocked' : 'Unblocked'); }
+  catch (e) { toast(e.message, 4000); } finally { busy(false); }
+}
+async function resetMember() {
+  busy(true);
+  try { await api('sendReset', { email: MEMBER.email }); toast('Link sent to ' + MEMBER.email + ' ✓', 3500); }
+  catch (e) { toast(e.message, 4000); } finally { busy(false); }
+}
+
+function shareInvite() {
+  const url = location.origin + location.pathname;
+  const text = 'Join the Zoutra / Adraba inventory app: open this link, tap "Create an account", then add it to your home screen.';
+  if (navigator.share) navigator.share({ title: 'Inventory app', text: text, url: url }).catch(() => {});
+  else { (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject()).then(() => toast('Link copied ✓')).catch(() => toast(url, 6000)); }
 }
 
 /* ---------------- start ---------------- */
@@ -414,11 +475,20 @@ document.addEventListener('visibilitychange', () => {   // back to the app: pick
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 
 (async function start() {
-  buildKeypad(); drawPin(); drawStep();
-  const saved = store.get('inv.code');
-  if (!saved) return;
-  CODE = saved; busy(true);
-  try { ME = await api('login'); await enterApp(); }
-  catch (e) { if (/Wrong code/.test(e.message)) logout(true); else { $('pinLabel').textContent = e.message; } }
+  drawStep();
+  store.set('inv.code', null);   // old PIN codes are no longer used
+  const q = new URLSearchParams(location.search);
+  if (q.get('reset')) {
+    RESET = { token: q.get('reset'), email: q.get('e') || '' };
+    history.replaceState(null, '', location.pathname);   // remove the secret from the address bar
+    $('xEmail').textContent = RESET.email;
+    return showAuth('reset');
+  }
+  $('lEmail').value = store.get('inv.email') || '';
+  const saved = store.get('inv.token');
+  if (!saved) return showAuth('login');
+  TOKEN = saved; busy(true);
+  try { ME = await api('me'); await enterApp(); }
+  catch (e) { if (TOKEN) showAuth('login', e.message); }
   finally { busy(false); }
 })();

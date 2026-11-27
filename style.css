@@ -121,3 +121,26 @@ footer .tot b { color: var(--ink); font-size: 15px; }
 
 /* who counted */
 .item .who { font-size: 11px; color: var(--ok); margin-top: 2px; }
+
+/* accounts */
+.auth { width: 100%; max-width: 360px; margin: 0 auto; padding: 0 22px 30px; }
+.auth form, #a-done { display: flex; flex-direction: column; }
+.auth form.hidden, #a-done.hidden { display: none; }
+.auth h2 { font-size: 20px; margin: 4px 0 2px; color: #fff; }
+.auth label { color: rgba(255,255,255,.8); }
+.auth input { background: #fff; }
+.auth .muted { color: rgba(255,255,255,.7); }
+.auth .btn.full { margin-top: 16px; background: #fff; color: var(--green); }
+.link { background: none; border: 0; color: #fff; text-decoration: underline; font-size: 15px; padding: 12px 0 4px; cursor: pointer; }
+.auth-alt { text-align: center; color: rgba(255,255,255,.75); margin-top: 18px; font-size: 15px; }
+.auth-alt .link { padding: 0; }
+.auth-msg { min-height: 0; border-radius: 10px; font-size: 14px; line-height: 1.35; }
+.auth-msg.err, .auth-msg.ok { padding: 10px 12px; margin-bottom: 8px; }
+.auth-msg.err { background: #fde8e8; color: #9b1c1c; }
+.auth-msg.ok { background: #e6f4ea; color: #1e4d2b; }
+#a-done { text-align: center; color: #fff; font-size: 16px; line-height: 1.45; }
+.done-icon { font-size: 44px; margin: 8px 0; }
+.team-head { font-size: 13px; font-weight: 600; color: #666; margin: 14px 0 6px; text-transform: uppercase; letter-spacing: .04em; }
+.tag { font-size: 11px; padding: 2px 6px; border-radius: 6px; margin-left: 6px; vertical-align: middle; }
+.tag.red { background: #fde8e8; color: #9b1c1c; }
+.auth label { display: block; font-size: 13px; margin: 12px 0 4px; }

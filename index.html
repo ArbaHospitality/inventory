@@ -23,9 +23,51 @@
     <h1>Inventory</h1>
     <p>Zoutra · Adraba</p>
   </div>
-  <div class="pin-label" id="pinLabel">Enter your code</div>
-  <div class="pin-dots" id="pinDots"></div>
-  <div class="keypad" id="keypad"></div>
+  <div class="auth">
+    <div id="authMsg" class="auth-msg"></div>
+
+    <form id="a-login" onsubmit="event.preventDefault(); doLogin()">
+      <label>Email</label><input id="lEmail" type="email" autocomplete="username" autocapitalize="off" inputmode="email">
+      <label>Password</label><input id="lPass" type="password" autocomplete="current-password">
+      <button class="btn full" id="lBtn" type="submit">Log in</button>
+      <button class="link" type="button" onclick="$('fEmail').value=$('lEmail').value; showAuth('forgot')">Forgot password?</button>
+      <div class="auth-alt">New to the team? <button class="link" type="button" onclick="$('rEmail').value=$('lEmail').value; showAuth('register')">Create an account</button></div>
+    </form>
+
+    <form id="a-register" class="hidden" onsubmit="event.preventDefault(); doRegister()">
+      <h2>Create an account</h2>
+      <p class="muted small">An owner approves new accounts. You get an email when it's done.</p>
+      <label>Your name</label><input id="rName" autocomplete="name">
+      <label>Email</label><input id="rEmail" type="email" autocomplete="username" autocapitalize="off" inputmode="email">
+      <label>Password (at least 8 characters)</label><input id="rPass" type="password" autocomplete="new-password">
+      <label>Password again</label><input id="rPass2" type="password" autocomplete="new-password">
+      <button class="btn full" id="rBtn" type="submit">Send my request</button>
+      <button class="link" type="button" onclick="showAuth('login')">‹ Back to log in</button>
+    </form>
+
+    <form id="a-forgot" class="hidden" onsubmit="event.preventDefault(); doForgot()">
+      <h2>Forgot password</h2>
+      <p class="muted small">Enter your email. We'll send you a link to choose a new password.</p>
+      <label>Email</label><input id="fEmail" type="email" autocomplete="username" autocapitalize="off" inputmode="email">
+      <button class="btn full" id="fBtn" type="submit">Send me a link</button>
+      <button class="link" type="button" onclick="showAuth('login')">‹ Back to log in</button>
+    </form>
+
+    <form id="a-reset" class="hidden" onsubmit="event.preventDefault(); doReset()">
+      <h2>Choose your password</h2>
+      <p class="muted small" id="xEmail"></p>
+      <label>New password (at least 8 characters)</label><input id="xPass" type="password" autocomplete="new-password">
+      <label>New password again</label><input id="xPass2" type="password" autocomplete="new-password">
+      <button class="btn full" id="xBtn" type="submit">Save password</button>
+      <button class="link" type="button" onclick="showAuth('login')">‹ Back to log in</button>
+    </form>
+
+    <div id="a-done" class="hidden">
+      <div class="done-icon">✉️</div>
+      <p id="doneText"></p>
+      <button class="btn full" type="button" onclick="showAuth('login')">Back to log in</button>
+    </div>
+  </div>
 </section>
 
 <!-- Main -->
@@ -74,7 +116,7 @@
       <button class="mgr-only" onclick="resetCounts()">Start a new month (clear all counts)</button>
       <button class="owner-only" onclick="openTeam()">Team members</button>
       <button onclick="refresh(true)">Refresh</button>
-      <button onclick="openChangeCode()">Change my code</button>
+      <button onclick="openChangePass()">Change my password</button>
       <button class="danger" onclick="logout()">Log out</button>
     </div>
   </div>
@@ -114,10 +156,11 @@
 
 <div class="sheet" id="codeSheet" onclick="closeSheet(event,this)">
   <div class="panel">
-    <h3>Change my code</h3>
-    <label>New code (at least 4 characters)</label><input id="cNew" type="password" inputmode="numeric" autocomplete="new-password">
-    <label>New code again</label><input id="cNew2" type="password" inputmode="numeric" autocomplete="new-password">
-    <button class="btn full" id="cBtn" onclick="changeCode()">Save new code</button>
+    <h3>Change my password</h3>
+    <label>Current password</label><input id="cCur" type="password" autocomplete="current-password">
+    <label>New password (at least 8 characters)</label><input id="cNew" type="password" autocomplete="new-password">
+    <label>New password again</label><input id="cNew2" type="password" autocomplete="new-password">
+    <button class="btn full" id="cBtn" onclick="changePass()">Save new password</button>
     <button class="btn light full" onclick="closeAll()">Cancel</button>
   </div>
 </div>
@@ -126,7 +169,7 @@
   <div class="panel tall">
     <h3>Team members</h3>
     <div id="teamList" class="team-list"></div>
-    <button class="btn full" onclick="openMember(null)">＋ Add a team member</button>
+    <button class="btn full" onclick="shareInvite()">Share the sign-up link</button>
     <button class="btn light full" onclick="closeAll()">Close</button>
   </div>
 </div>
@@ -134,11 +177,14 @@
 <div class="sheet" id="memberSheet" onclick="closeSheet(event,this)">
   <div class="panel tall">
     <h3 id="mTitle">Team member</h3>
-    <label>Name</label><input id="mName" autocomplete="off">
-    <label>Personal code (at least 4 characters)</label><input id="mCode" inputmode="numeric" autocomplete="off">
+    <div class="muted small" id="mEmail"></div>
+    <p class="muted small" id="mHint"></p>
+    <div id="mNameWrap"><label>Name</label><input id="mName" autocomplete="off"></div>
     <label class="check"><input type="checkbox" id="mOwner" onchange="ownerToggle()"> Owner (all inventories + team)</label>
     <div id="mRoles"></div>
     <button class="btn full" id="mSave" onclick="saveMember()">Save</button>
+    <button class="btn light full" id="mReset" onclick="resetMember()">Email a password reset link</button>
+    <button class="btn light full danger-text" id="mBlock" onclick="blockMember()">Block</button>
     <button class="btn light full danger-text" id="mRemove" onclick="removeMember()">Remove from team</button>
     <button class="btn light full" onclick="openTeam()">Back</button>
   </div>
